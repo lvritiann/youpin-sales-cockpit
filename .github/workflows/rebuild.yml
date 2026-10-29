@@ -1,10 +1,14 @@
 name: rebuild-cockpit
 
-# 触发条件：金山 AirScript 定时推送 _incoming/data.json 后自动重建
+# 触发条件：
+#   ① 金山 AirScript（read_daily.js）推 _incoming/data.json —— 销量/金额/渠道
+#   ② 金山 AirScript（flow_push.js）推 _incoming/flow.json —— 前一日车流/单加
+# 两者都会重建页面；同时到达时靠 concurrency 合并，不会重建两次页面。
 on:
   push:
     paths:
       - '_incoming/data.json'
+      - '_incoming/flow.json'
   workflow_dispatch:
 
 permissions:
@@ -31,6 +35,19 @@ jobs:
           ls -l _incoming/data.json
           python -c "import json;d=json.load(open('_incoming/data.json',encoding='utf-8'));print('天数',d['meta']['days_with_data'],'站数',d['meta']['station_count'])"
           cp _incoming/data.json _kdocs/data.json
+
+      # 车流是独立的一条链路（15 个非油 V1 报表，销售日报里没有车次字段）。
+      # 收到 AirScript 推的 flow.json 就覆盖仓库快照；没收到（比如 AirScript 当天失败）
+      # 就沿用 _kdocs/_flow.json 里上一次的快照，页面照常出，只是车流停在旧日期。
+      - name: 应用最新车流数据
+        run: |
+          if [ -f _incoming/flow.json ]; then
+            cp _incoming/flow.json _kdocs/_flow.json
+            python -c "import json;d=json.load(open('_kdocs/_flow.json',encoding='utf-8'));print('车流 asof',d.get('asof'),'站数',len(d.get('stations') or {}))"
+          else
+            echo "未收到 _incoming/flow.json —— 沿用 _kdocs/_flow.json 里的现有快照"
+            python -c "import json;d=json.load(open('_kdocs/_flow.json',encoding='utf-8'));print('沿用 asof',d.get('asof'))"
+          fi
 
       - name: 重建驾驶舱
         run: python _kdocs/build_cockpit2.py
