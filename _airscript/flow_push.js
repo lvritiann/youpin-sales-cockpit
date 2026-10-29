@@ -94,12 +94,16 @@ function normDate(v) {
   return str.slice(0, 10);
 }
 
-/* 会计日 → 「今日填报」里该日 南/东 所在的行号（1 基，Excel 显示行号） */
+/* 会计日 → 「今日填报」里该日 南/东 所在的行号（1 基，Excel 显示行号）
+   ★ 不用 new Date('2026-10-28T00:00:00Z') —— 部分 JS 引擎不认 ISO 字符串，
+     会返回 Invalid Date 且不报错，结果 rowOfDate 全是 NaN。改用 Date.UTC 数值构造。 */
 function rowOfDate(ds) {
-  var a = new Date(ds + 'T00:00:00Z').getTime();
-  var b = new Date(YEAR_START + 'T00:00:00Z').getTime();
-  var days = Math.round((a - b) / 86400000);
-  return 1 + 2 * days;
+  var p = String(ds).split('-');
+  var q = YEAR_START.split('-');
+  var a = Date.UTC(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+  var b = Date.UTC(parseInt(q[0], 10), parseInt(q[1], 10) - 1, parseInt(q[2], 10));
+  if (isNaN(a) || isNaN(b)) return 0;
+  return 1 + 2 * Math.round((a - b) / 86400000);
 }
 
 function r2(x) { return Math.round(x * 100) / 100; }
