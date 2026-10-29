@@ -1,7 +1,15 @@
 /* ==========================================================================
- * 成品油日报 → GitHub _incoming/data.json   v2.5
+ * 成品油日报 → GitHub _incoming/data.json   v2.6
  * 运行位置：金山文档「202611销售及库存日报（新).xlsx」内的 AirScript
  * 触发方式：定时任务（8:30 / 9:00 / 9:30 / 10:00 / 11:30 各挂一条，跑同一个 main）
+ *
+ * v2.6 变更（2026-10-29，修体积护栏误伤）
+ *  1) ★ 护栏原先拿 json.length（JS 字符数）去比 GitHub 返回的 size（字节数）。
+ *     中文站名一个占 3 字节，两者差约 11%：实测 70,555 字符 ↔ 78,687 字节。
+ *     结果一次正常的「长小数截到 4 位」（体积本就该降）被算成 84.7%，
+ *     误判成读表不全而拦下 —— 数据本身完全正常（3 天 / 30 站）。
+ *     新增 utf8Len() 换算，护栏改比 UTF-8 字节。
+ *  2) 新增「0 天保护」：一个日块都没读到就中止推送，绝不把远端清空。
  *
  * v2.5 变更（2026-10-29，源字段精度归一）
  *  1) ★ 站级 t10 / t0 / t92 / t95 / t / l / amt / wan 统一取 4 位小数。
@@ -62,7 +70,7 @@
  *  4) 全零日块 = 未填报，跳过（不可补零，会把日均拉低）。
  * ========================================================================== */
 
-var VER = 'v2.5';
+var VER = 'v2.6';
 
 var CFG = {
   OWNER : 'lvritiann',
@@ -146,6 +154,22 @@ function num(x) {
 function r3(v) { return Math.round(v * 1000) / 1000; }
 function r2(v) { return Math.round(v * 100) / 100; }
 function r4(v) { return Math.round(v * 10000) / 10000; }
+
+/* UTF-8 字节长度。
+   ★ 不能拿 String.length 当字节数：JS 的 length 是 UTF-16 码元数，
+     一个中文站名在 UTF-8 里占 3 字节，实测 70,555 字符 ↔ 78,687 字节（差 11%）。
+     体积护栏要和 GitHub 返回的 size（字节）比，就必须先换算。 */
+function utf8Len(str) {
+  var n = 0, i, c;
+  for (i = 0; i < str.length; i++) {
+    c = str.charCodeAt(i);
+    if (c < 0x80) n += 1;
+    else if (c < 0x800) n += 2;
+    else if (c >= 0xD800 && c <= 0xDBFF) { n += 4; i++; }   // 代理对（表情等）
+    else n += 3;
+  }
+  return n;
+}
 function p2(n) { return (n < 10 ? '0' : '') + n; }
 
 /* ---------------------------------------------------------------- 表/格访问 */
@@ -654,10 +678,19 @@ function main() {
       for (var i = 0; i < nm.length; i++) tot += L.stations[nm[i]].t;
       say('最新 ' + last + ' 日：站级 ' + r2(tot) + ' 吨 + 小额 ' + r2(xs) + ' 吨 = ' + r2(tot + xs) + ' 吨（' + nm.length + ' 站）');
     }
-    say('JSON ' + json.length + ' 字节');
+    say('JSON ' + utf8Len(json) + ' 字节（' + json.length + ' 字符）');
 
     if (!CFG.PUSH) {
       say('PUSH=false，仅解析未推送。核对上面数字无误后把 CFG.PUSH 改成 true');
+      flush();
+      return json;
+    }
+
+    /* 0 天保护：一个日块都没读到就别推了。
+       这种情况几乎都是源表被改名 / 权限丢失 / 日块标题变动，
+       推上去等于把页面清空，比不推危害大得多。 */
+    if (!days.length) {
+      say('⚠️ 本次没读到任何有数据的日块，中止推送（远端保持上一版不动）');
       flush();
       return json;
     }
@@ -703,17 +736,24 @@ function main() {
     /* 体积护栏：新内容比远端小超过 15% 就中止推送。
        典型事故是某天只读到 1 个日块（权限变了 / 表结构改了），
        照样推上去会把已有 3 天的数据冲成 1 天，页面直接掉数。
-       这种情况下宁可这次不推，让远端保持上一版完整数据，等人工查。 */
+       这种情况下宁可这次不推，让远端保持上一版完整数据，等人工查。
+
+       ★ 2026-10-29 自己踩的坑：这里必须比 **UTF-8 字节数**，不能比 json.length。
+         json.length 是 JS 字符数，中文站名一字占 3 字节，两者差约 11%：
+         实测 70,555 字符 ↔ 78,687 字节。拿字符数比字节数，
+         一次正常的「长小数截到 4 位」（体积本就该降）被算成 84.7%，
+         差点误判成读表不全。 */
     if (cur && cur.size > 1000) {
-      var ratio = json.length / cur.size;
+      var nBytes = utf8Len(json);
+      var ratio = nBytes / cur.size;
       if (ratio < 0.85) {
-        say('⚠️ 中止推送：新内容 ' + json.length + ' 字节，只有远端 ' + cur.size
+        say('⚠️ 中止推送：新内容 ' + nBytes + ' 字节，只有远端 ' + cur.size
           + ' 字节的 ' + (ratio * 100).toFixed(1) + '%（阈值 85%）');
         say('   → 大概率本次读表不全。远端保持上一版不动，请检查日块/权限后重跑。');
         flush();
         return json;
       }
-      say('体积对比：新 ' + json.length + ' 字节 / 远端 ' + cur.size
+      say('体积对比：新 ' + nBytes + ' 字节 / 远端 ' + cur.size
         + ' 字节（' + (ratio * 100).toFixed(1) + '%）');
     }
 
