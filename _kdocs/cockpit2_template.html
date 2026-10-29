@@ -140,23 +140,56 @@
   /* ---- 前一日各站销量：日走势柱图正上方的一条极窄小字带 ----
      只占一行高（≈22px），16 项小字横排；窄屏自动换行，不撑高卡片。
      数字用 tabular-nums，保证小数点对齐、一眼能扫出高低。 */
-  .pdbar{padding:8px 0 9px;margin:2px 0 12px;font-size:12.5px;line-height:1.55;
+  .pdbar{padding:9px 0 10px;margin:2px 0 12px;font-size:12.5px;line-height:1.5;
     border-top:1px solid #14263a;border-bottom:1px solid #14263a;color:#93aac4}
   .pdbar:empty{display:none}
-  .pdsum{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 18px;margin-bottom:6px}
-  .pdgrid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));
-    gap:3px 10px;align-items:baseline}
-  @media (max-width:900px){ .pdgrid{grid-template-columns:repeat(4,minmax(0,1fr))} }
-  @media (max-width:560px){ .pdgrid{grid-template-columns:repeat(2,minmax(0,1fr))} }
+
+  /* ---- 头行：日期 / 合计 / 比项切换 / 单位legend ---- */
+  .pdhead{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;margin-bottom:8px}
   .pdbar .pdk{color:#b6c9de;font-weight:600;white-space:nowrap;letter-spacing:.2px;font-size:12.5px}
   .pdbar .pdt{color:#e8cf95;font-weight:700;font-variant-numeric:tabular-nums;
     white-space:nowrap;font-size:14.5px}
-  .pdbar .pdi,.pdbar .pdx{white-space:nowrap;font-size:12.5px;overflow:hidden;text-overflow:ellipsis}
-  .pdbar .pdi b,.pdbar .pdx b{color:#fff;font-weight:640;font-size:13.5px;
-    font-variant-numeric:tabular-nums;margin-left:3px}
-  .pdbar .pdi.zero b{color:#5c7590}
-  .pdbar .pdx{color:#a8bcd2}
-  .pdbar .sep{color:#2b4a6b}
+  .pdseg{display:inline-flex;gap:1px;border:1px solid #1b3550;border-radius:6px;
+    padding:1px;background:#0a1521}
+  .pdseg button{background:none;border:0;color:#7e93ab;font-size:11px;padding:1.5px 7px;
+    border-radius:4px;cursor:pointer;font-family:inherit;white-space:nowrap;line-height:1.45}
+  .pdseg button.on{background:#16304a;color:#f0d9a8;font-weight:600}
+  .pdseg button:hover{color:#cbdcee}
+  .pdnote{color:#5f7691;font-size:10.5px;white-space:nowrap}
+  .pdnote b{color:#8298b0;font-weight:600}
+
+  /* ---- 站点卡栅格：宽屏 8 列，逐级降；饼图 + 4 行指标 ---- */
+  .pdgrid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:5px 7px}
+  /* 单站视角只有 1 张卡：别再按 8 列切，否则卡被挤到 90px 宽、文字全折行。
+     两个类名的优先级高于下面任何 @media 里的单类名，窄屏也不会被覆盖回去。 */
+  .pdgrid.one{grid-template-columns:minmax(0,236px)}
+  @media (max-width:1340px){ .pdgrid{grid-template-columns:repeat(6,minmax(0,1fr))} }
+  @media (max-width:1020px){ .pdgrid{grid-template-columns:repeat(5,minmax(0,1fr))} }
+  @media (max-width:860px){ .pdgrid{grid-template-columns:repeat(4,minmax(0,1fr))} }
+  @media (max-width:640px){ .pdgrid{grid-template-columns:repeat(3,minmax(0,1fr))} }
+  @media (max-width:470px){ .pdgrid{grid-template-columns:repeat(2,minmax(0,1fr))} }
+
+  .pdc{display:flex;gap:6px;align-items:center;min-width:0;
+    padding:4px 5px 4px 4px;border-radius:7px;background:#0b1622;
+    border:1px solid #14243a}
+  .pdc.zero{opacity:.42}
+  .pdc.vx{border-color:#3b3018;background:#12100a}     /* 小额配送（虚拟实体） */
+  .pdp{flex:0 0 auto;width:34px;height:34px;display:block}
+  .pdp .ring{fill:none;stroke:#17293c;stroke-width:6}
+  .pdp .seg{fill:none;stroke-width:6;transition:stroke-dasharray .25s}
+  .pdm{min-width:0;flex:1 1 auto;line-height:1.32}
+  .pdn{display:flex;align-items:baseline;gap:5px;font-size:11.5px;color:#dbe7f4;
+    font-weight:640;white-space:nowrap;overflow:hidden}
+  .pdn .nm{overflow:hidden;text-overflow:ellipsis}
+  .pdn .pdr{color:#f0d9a8;font-weight:700;font-variant-numeric:tabular-nums;
+    margin-left:auto;flex:0 0 auto;font-size:11.5px}
+  .pdv{color:#8fa6bd;font-size:10.5px;white-space:nowrap;overflow:hidden;
+    text-overflow:ellipsis;font-variant-numeric:tabular-nums;letter-spacing:-.1px}
+  .pdv b{font-weight:640}
+  .pdv .gg{color:#e0b96a}
+  .pdv .dd{color:#6fa8e8}
+  .pdv .u{color:#5c7290;font-size:9.5px}
+  .pdv.pdz{color:#71889f}
   .cols{display:flex;align-items:flex-end;justify-content:center;gap:5px;height:228px;
     flex:none;padding-top:56px;overflow-x:clip;overflow-y:visible}
   .col{flex:1 1 auto;max-width:58px;min-width:9px;height:100%;display:flex;
@@ -901,6 +934,8 @@ let TAX = 1, SCP = 'full', WIN = 30, MK = D.meta.month_order[0];
    与 MK（会计月轨迹当前选中月）相互独立 —— 那个管「本月信息带 / 明细表」，
    这个只管路段这一张图，两者不必联动（用户常想全年看分布、单月看波动）。 */
 let RDSEL = '';
+/* 前一日窄条的两个可配置项：比项（哪几种油品参与比值）/ 比值格式（10 分制 or 原值） */
+let PDRI = 0, PDFMT = '10';
 const XIAO_NAME = (D.yearly && D.yearly.xiao && D.yearly.xiao.name) || '小额配送';
 const tv = m => SCP === 'full' ? m.ft : m.t;
 const CUR_Y = +(D.meta.month_order[0] || '2026-11').slice(0, 4);
@@ -1523,49 +1558,141 @@ function trendOf(P) {
 }
 
 /* ---------- 主渲染 ---------- */
-/* 前一日各站销量：日走势柱图正上方的极窄小字带。
-   口径跟随开关（仅零售时不含小额）。单站视角只报本对的一个数，不再重复列名、
-   也不混入公司级的小额配送（那会把一站说大）。 */
+/* ---------- 前一日窄条：每站一张小卡（环形饼 + 汽柴比 + 量/单价 + 车流/单加） ----------
+   口径跟随开关（仅零售时不含小额）；单站视角只出本对一张卡，
+   不混入公司级小额配送（那会把一站说大）。
+   比项可切：汽:柴 / 柴:汽 / 四油品；比值格式可切：10 分制（6:4）或原值（63.1:43.7）。 */
+const PD_RATIO = [
+  { n: '汽:柴', it: [{ k: '汽油', c: '#e0b96a', v: x => x.g }, { k: '柴油', c: '#4a90d9', v: x => x.d }] },
+  { n: '柴:汽', it: [{ k: '柴油', c: '#4a90d9', v: x => x.d }, { k: '汽油', c: '#e0b96a', v: x => x.g }] },
+  { n: '92:95:0#:-10#', it: [
+    { k: '92#', c: '#e0b96a', v: x => x.t92 }, { k: '95#', c: '#f5dfae', v: x => x.t95 },
+    { k: '0#', c: '#4a90d9', v: x => x.t0 }, { k: '-10#', c: '#93bdec', v: x => x.t10 }] },
+];
+const PDC = 2 * Math.PI * 13;                       // 环形饼周长（r=13）
+const _r1 = v => { const s = (Math.round(v * 10) / 10).toFixed(1); return s.endsWith('.0') ? s.slice(0, -2) : s; };
+const _i0 = v => (v == null || v === '') ? '—' : Math.round(v).toLocaleString('zh-CN');
+
+/* 通用 N 段环形饼：value 数组 + 颜色数组，按顺时针从 12 点起铺 */
+function pdPie(vals, cols) {
+  let o = '<circle class="ring" cx="17" cy="17" r="13"/>';
+  const vs = (vals || []).map(v => Math.max(0, +v || 0));
+  const tot = vs.reduce((a, b) => a + b, 0);
+  if (!tot) return o;
+  let acc = 0;
+  vs.forEach((v, i) => {
+    if (v <= 0) return;
+    const L = PDC * v / tot;
+    o += `<circle class="seg" cx="17" cy="17" r="13" stroke="${cols[i] || '#5c7590'}"`
+      + ` stroke-dasharray="${L.toFixed(2)} ${(PDC - L).toFixed(2)}"`
+      + ` stroke-dashoffset="${(-acc).toFixed(2)}" transform="rotate(-90 17 17)"/>`;
+    acc += L;
+  });
+  return o;
+}
+
+function pdRatioTxt(vals) {
+  const tot = vals.reduce((a, b) => a + b, 0);
+  if (!tot) return '—';
+  const s = PDFMT === '10' ? vals.map(v => v / tot * 10) : vals;
+  return s.map(_r1).join(':');
+}
+
+function pdCard(it, rs) {
+  const vals = rs.it.map(s => Math.max(0, +(s.v(it) || 0)));
+  const tot = vals.reduce((a, b) => a + b, 0);
+  const un = !!it.un || tot <= 0;                 // 源表未拆柴汽 → 空环，不臆造比例
+  const rt = un ? '—' : pdRatioTxt(vals);
+  const zero = !(it.t > 0);
+  const flow = (it.fv != null || it.fsp != null)
+    ? `${_i0(it.fv)}<span class="u">车</span> ${it.fsp == null ? '—' : it.fsp}/${it.fdp == null ? '—' : it.fdp}`
+    : '<span class="u">无车流/单加</span>';
+  const gTxt = un ? '—' : n(it.g);
+  const dTxt = un ? '—' : n(it.d);
+  const pTxt = (v) => v == null ? '—' : v.toFixed(2);
+  return `<div class="pdc${zero ? ' zero' : ''}${it.name === '小额配送' ? ' vx' : ''}"`
+    + ` title="${it.name}　汽 ${gTxt}t / 柴 ${dTxt}t　单价 汽${pTxt(it.gp)} 柴${pTxt(it.dp)} 元/L">`
+    + `<svg class="pdp" viewBox="0 0 34 34">${pdPie(un ? [] : vals, rs.it.map(s => s.c))}</svg>`
+    + '<div class="pdm">'
+    +   `<div class="pdn"><span class="nm">${it.name}</span><span class="pdr">${rt}</span></div>`
+    +   `<div class="pdv"><span class="gg">汽${gTxt}</span> <span class="dd">柴${dTxt}</span><span class="u">t</span>`
+    +     `${un ? '<span class="u"> 未拆</span>' : ''}</div>`
+    +   `<div class="pdv"><span class="gg">${pTxt(it.gp)}</span> <span class="dd">${pTxt(it.dp)}</span><span class="u">元/L</span></div>`
+    +   `<div class="pdv pdz">${flow}</div>`
+    + '</div></div>';
+}
+
 function renderPd(P) {
   const box = $('#pdbar');
   if (!box) return;
   const PD = D.prev_day || {};
   const items = PD.items || [];
   if (!items.length) { box.innerHTML = ''; return; }
-  const isFull = SCP === 'full';
-  const xiao = isFull ? (PD.xiao || 0) : 0;
   const XIAO_TAG = '小额配送';
+  const isFull = SCP === 'full';
+  const xi = isFull ? (PD.xiao_item || null) : null;
 
-  let who, sum, list;
+  let who, list, sumT, sumG = null, sumD = null, gp = null, dp = null;
   if (!P) {
     who = '15 对';
     list = items.slice();
-    sum = list.reduce((a, x) => a + x.t, 0) + xiao;
+    if (xi) list = list.concat([xi]);
+    sumT = PD.total != null ? PD.total : list.reduce((a, x) => a + x.t, 0);
+    const s0 = PD.sum || {};
+    sumG = s0.g; sumD = s0.d; gp = s0.gp; dp = s0.dp;
   } else if (P.name === XIAO_TAG) {
     who = XIAO_TAG;
-    list = [];
-    sum = xiao;
+    list = [xi || { name: XIAO_TAG, t: PD.xiao || 0, g: 0, d: 0, un: true }];
+    sumT = PD.xiao || 0;
+    sumG = list[0].g; sumD = list[0].d;
   } else {
     const one = items.find(x => x.name === P.name);
     if (!one) { box.innerHTML = ''; return; }
-    who = P.name;
-    list = [];
-    sum = one.t;
+    who = P.name; list = [one]; sumT = one.t;
+    sumG = one.g; sumD = one.d; gp = one.gp; dp = one.dp;
   }
 
-  const cell = (cls, nm, v) =>
-    `<span class="${cls}${v > 0 ? '' : ' zero'}">${nm}<b>${n(v)}</b></span>`;
-  let h = '<div class="pdsum">'
-    + `<span class="pdk">前一日 ${PD.label || '—'}</span>`
-    + `<span class="pdk">${who}合计 <b class="pdt">${n(sum)}</b> 吨</span>`
-    + '</div>';
-  if (list.length) {
-    h += '<div class="pdgrid">'
-      + list.map(x => cell('pdi', x.name, x.t)).join('')
-      + (xiao > 0 ? cell('pdx', XIAO_TAG, xiao) : '')
-      + '</div>';
+  const rs = PD_RATIO[PDRI] || PD_RATIO[0];
+  /* 合计行的比：按当前比项把各卡的值加起来再算，任何比项都成立 */
+  const agg = rs.it.map(s => list.reduce((a, x) => a + Math.max(0, +(s.v(x) || 0)), 0));
+  const aggTot = agg.reduce((a, b) => a + b, 0);
+  const aggTxt = aggTot > 0 ? pdRatioTxt(agg) : '—';
+
+  let h = '<div class="pdhead">'
+    + `<span class="pdk">前一日 <b class="pdt">${PD.label || '—'}</b></span>`
+    + `<span class="pdk">${who}合计 <b class="pdt">${n(sumT)}</b> 吨</span>`
+    + `<span class="pdk">${rs.n} <b class="pdt">${aggTxt}</b></span>`;
+  if (sumG != null && sumD != null && (sumG + sumD) > 0) {
+    h += `<span class="pdk">合计 <span style="color:#e0b96a">汽 ${n(sumG)}</span>`
+      + ` / <span style="color:#6fa8e8">柴 ${n(sumD)}</span> t</span>`;
   }
+  if (gp != null || dp != null) {
+    h += `<span class="pdk">均价 <span style="color:#e0b96a">${gp == null ? '—' : gp.toFixed(2)}</span>`
+      + ` / <span style="color:#6fa8e8">${dp == null ? '—' : dp.toFixed(2)}</span> 元/L</span>`;
+  }
+  h += '<span class="pdseg" id="pd_ri">'
+    + PD_RATIO.map((s, i) => `<button data-ri="${i}" class="${i === PDRI ? 'on' : ''}">${s.n}</button>`).join('')
+    + '</span><span class="pdseg" id="pd_fmt">'
+    + `<button data-f="10" class="${PDFMT === '10' ? 'on' : ''}">10 分制</button>`
+    + `<button data-f="raw" class="${PDFMT === 'raw' ? 'on' : ''}">原值</button></span>`
+    + `<span class="pdnote" title="车流量＝非油V1「车次累计 ÷ 天数」折日均，不是按日实采；单加＝升÷单（比值，跨期可直接用）。若要真实前一日车次，把 _flow.json 里 stations[*].v 换成当日值即可，页面无需改动。${PD.flow_note ? '\n' + PD.flow_note : ''}">`
+    + `车次/日 · 单加 <b>汽/柴 L</b> `
+    + `<b>≈</b> 非油V1${PD.flow_asof ? '（' + PD.flow_asof + '）' : ''}</span>`
+    + '</div>';
+
+  h += `<div class="pdgrid${list.length === 1 ? ' one' : ''}">`
+    + list.map(x => pdCard(x, rs)).join('') + '</div>';
   box.innerHTML = h;
+
+  const ri = $('#pd_ri'), fm = $('#pd_fmt');
+  if (ri) ri.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    PDRI = +b.dataset.ri; renderPd(isPair() ? scope() : null);
+  });
+  if (fm) fm.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    PDFMT = b.dataset.f; renderPd(isPair() ? scope() : null);
+  });
 }
 
 function render() {
