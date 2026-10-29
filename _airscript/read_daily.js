@@ -1,7 +1,23 @@
 /* ==========================================================================
- * 成品油日报 → GitHub _incoming/data.json   v2.8
+ * 成品油日报 → GitHub _incoming/data.json   v2.9
  * 运行位置：金山文档「202611销售及库存日报（新).xlsx」内的 AirScript
  * 触发方式：定时任务（8:30 / 9:00 / 9:30 / 10:00 / 11:30 各挂一条，跑同一个 main）
+ *
+ * v2.9 变更（2026-10-29，主表瘦身：归档迁到独立的中转簿）
+ *  1) ★ 本簿不再写「历史归档」表 —— CFG.ARCH_SHEET 置空，archiveToSheet 首句返回。
+ *     那 1001 行站级 + 34 行月汇总从填报簿搬到了独立工作簿
+ *     「成品油经营数据中转簿」，由挂在那本簿上的 transit_sync.js 负责落表。
+ *  2) 为什么搬：填报簿 13.4 MB / 62 张子表，历史却和每日填报挤在一起；
+ *     而驾驶舱要的「任意区间 × 任意站」切片，光有月汇总 + 月站级根本做不出来，
+ *     中转簿多了 30,502 行 date × station 日粒度矩阵。
+ *  3) 为什么脚本不跟着搬：本脚本要读三张大表（销售日报 1601×28、渠道 1537×22、
+ *     大客户 1547×162），读源留在本簿是本地读、零跨文档成本；
+ *     跨文档「写」在 WPS 上没验证过，不做没把握的事。
+ *     transit_sync.js 反着来：跨文档「读」销售日报（flow_push.js 已验证可行），
+ *     写自己簿的表（本地写）。
+ *  4) 本脚本职责不变：解析全量 → 推 data.json。渠道 / 大客户 / 车流仍只看本簿。
+ *  5) 大客户槽位改为表头驱动（clientSlots）：从硬编码 9 个客户改为扫 15 个槽位，
+ *     表头空着的统一归入「其他」。详见下方 CLIENT_* 注释。
  *
  * v2.8 变更（2026-10-29，新增「历史归档」中转表落表）
  *  1) ★ 每次解析成功后，把「当前会计月汇总 + 站级明细」写入本簿的「历史归档」表。
@@ -82,7 +98,7 @@
  *  4) 全零日块 = 未填报，跳过（不可补零，会把日均拉低）。
  * ========================================================================== */
 
-var VER = 'v2.8';
+var VER = 'v2.9';
 
 var CFG = {
   OWNER : 'lvritiann',
@@ -91,8 +107,16 @@ var CFG = {
   PATH  : '_incoming/data.json',
 
   SHEET_CFG : '驾驶舱配置',   // 可选表：A1=会计月(留空自动推导), B1=GitHub令牌, C1..=运行日志
-  ARCH_SHEET: '历史归档',     // ★ 中转表：逐月累积月汇总+站级明细，清空日报表不影响它
-                             //   手工新建一张同名空工作表即可启用；没有则自动跳过
+  ARCH_SHEET: '',            // ★ 2026-10-29 起停用（留空 = 跳过归档落表）
+                             //   归档已迁到独立工作簿「成品油经营数据中转簿」，
+                             //   由挂在那本簿上的 transit_sync.js 负责 —— 它跨文档读本簿的
+                             //   「销售日报」，把日粒度/月汇总/站级明细写进中转簿自己的表。
+                             //
+                             //   留空的收益：填报簿不再累积 1001 行站级 + 34 行月汇总。
+                             //   每月清空日报表时，历史也不再和填报数据挤在同一本簿里。
+                             //
+                             //   真要临时回到「写在本簿」：把这里改回 '历史归档'，
+                             //   并在本簿手工建一张同名空工作表即可（archiveToSheet 会自己补表头）。
   TOKEN     : '',            // ★ 令牌兜底位（v2.2 新增）
                              //   取值优先级：①「驾驶舱配置」B1  →  ② 这里的 TOKEN
                              //   没有这张表、或 B1 空着，就用这行；两边都空才报错。
@@ -114,9 +138,27 @@ var C_AGG  = { t: 6, l: 11, amt: 16, wan: 21 };
 var CHANNELS = ['现金', 'POS', '微信', '支付宝', '工贸卡', '壳牌卡', '大客户',
                 '通四海', '定期结算', '回罐', '内结'];
 var AGG = ['小计', '合计', '零售小计', '小额配送', '总计', '累计'];
-var CLIENT_COLS = [[12, '中融致远'], [22, '锦航石化'], [32, '大连润途'], [42, '陕西卡一车'],
-                   [52, '能链石化'], [62, '中润国泰'], [72, '潍坊星油'], [102, '运达通'],
-                   [142, '通四海']];
+
+/* ★ 客户块布局（0 基）：每块 10 列（5 列升 + 5 列金额），步长 10，首块是「XX合计」。
+   2026-10-29 之前的写法是硬编码 9 个客户 + 固定列位：
+       [[12,'中融致远'],[22,'锦航石化'],…,[102,'运达通'],[142,'通四海']]
+   但源表实际有 15 个槽位（C/M/W/AG/AQ/BA/BK/BU/CE/CO/CY/DI/DS/EC/EM），
+   其中 CE(82)、CO(92)、DI(112)、DS(122)、EC(132) 五块代码从来没读过。
+   实测 CO 与 DI 天天都有真实量（占大客户总量约 0.8%）——
+   这些量在「大客户构成」里既看不到、也不会报错，属于静默丢失。
+   现在改为扫第 1 行表头：有名字用名字，没名字但确有量的记「未署名客户 <列号>」，
+   并逐行拿各槽位之和去对「XX合计」列，对不上立刻告警。 */
+var CLIENT_STEP  = 10;
+var CLIENT_AGGC  = 2;          // 「XX合计」块的起始列（0 基）
+
+function clientSlots(hdr, width) {
+  var out = [], W = Math.max(hdr ? hdr.length : 0, width || 0);
+  for (var c = CLIENT_AGGC + CLIENT_STEP; c + 9 < W; c += CLIENT_STEP) {
+    out.push([c, (hdr && hdr[c] !== undefined && hdr[c] !== null) ? s(hdr[c]) : '']);
+  }
+  return out;
+}
+
 var SEQ = ['26', '27', '28', '29', '30', '31', '1', '2', '3', '4', '5', '6', '7', '8',
            '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20',
            '21', '22', '23', '24', '25'];
@@ -512,8 +554,13 @@ function build() {
   var bigcust = {};
   if (sheet(CFG.CUST.name)) {
     var urow = readSheet(CFG.CUST.name, CFG.CUST.rows, CFG.CUST.cols);
+    /* 客户名只在第 1 行（31 个日块共用这一行表头），不在任何日块内部，
+       所以必须单独取 rows[0]，不能指望在日块里扫到名字。 */
+    var uSlots = clientSlots(urow.rows[0] || [], CFG.CUST.cols);
+    var uNamed = 0, uBlank = 0;
+    for (var si = 0; si < uSlots.length; si++) { if (uSlots[si][1]) uNamed++; else uBlank++; }
     var udb = dayBlocks(urow.rows, '当日销量（升）');
-    var uacc = {};
+    var uacc = {}, uGap = 0, uTot = 0, uBlankL = 0, uUsed = [], uBlankCols = [];
     for (var ui = 0; ui < udb.order.length; ui++) {
       var d3 = udb.order[ui];
       if (realDate(ac, d3) > T) continue;
@@ -525,19 +572,47 @@ function build() {
         if (a0 && AGG.indexOf(a0) < 0 && !/^[\d\-－—]/.test(a0)) road2 = a0;
         if (!isName(a1)) continue;
         var rec = { road: road2 || a0, l: num(r[6]), amt: num(r[11]), c: {} };
-        for (var ck = 0; ck < CLIENT_COLS.length; ck++) {
-          var base = CLIENT_COLS[ck][0], cname = CLIENT_COLS[ck][1];
-          if (base + 9 < r.length) {
-            var lv = num(r[base + 4]), av = num(r[base + 9]);
-            if (lv || av) { rec.c[cname] = { l: r2(lv), amt: r2(av) }; anyU = true; }
-          }
+        var sumL = 0;
+        for (var ck = 0; ck < uSlots.length; ck++) {
+          var base = uSlots[ck][0], cnm = uSlots[ck][1];
+          if (base + 9 >= r.length) continue;
+          var lv = num(r[base + 4]), av = num(r[base + 9]);
+          if (!lv && !av) continue;
+          /* 表头空着 = 该客户没登记名字，统一归入「其他」；
+             具体是哪一列仍然打日志，方便回源表补名字。 */
+          var ckey = cnm || '其他';
+          if (!cnm) { uBlankL += lv; if (uBlankCols.indexOf(colName(base + 1)) < 0) uBlankCols.push(colName(base + 1)); }
+          if (uUsed.indexOf(ckey) < 0) uUsed.push(ckey);
+          var o = rec.c[ckey];
+          if (!o) { o = rec.c[ckey] = { l: 0, amt: 0 }; }
+          o.l += lv; o.amt += av;
+          sumL += lv;
         }
+        for (var kk in rec.c) {
+          if (!rec.c.hasOwnProperty(kk)) continue;
+          rec.c[kk].l = r2(rec.c[kk].l); rec.c[kk].amt = r2(rec.c[kk].amt);
+        }
+        /* 逐行对账：各槽位之和必须等于「XX合计」块的升数，否则是列位漂移 */
+        var aggL = num(r[CLIENT_AGGC + 4]);
+        if (aggL > 0) { uTot += aggL; uGap += (aggL - sumL); }
         if (rec.l || rec.amt) anyU = true;
         per2[a1] = rec;
       }
       if (anyU) uacc[d3] = per2;
     }
     if (Object.keys(uacc).length) bigcust[CFG.CUST.name] = uacc;
+
+    say('大客户槽位 ' + uSlots.length + ' 个（具名 ' + uNamed + ' / 空表头 ' + uBlank + '）'
+        + '，有量客户 ' + uUsed.length + ' 个');
+    if (uBlankL > 0) {
+      say('空表头列（' + uBlankCols.join('、') + '）贡献 ' + r2(uBlankL) + ' 升'
+          + (uTot > 0 ? '（占大客户 ' + (uBlankL / uTot * 100).toFixed(2) + '%）' : '')
+          + ' → 已统一归入「其他」；要单列成客户，去源表第 1 行把这些格子填上名字');
+    }
+    if (uTot > 0 && Math.abs(uGap) / uTot > 0.005) {
+      say('⚠️ 大客户对账不平：合计 ' + r2(uTot) + ' 升，各槽位之和差 ' + r2(uGap) + ' 升'
+          + '（可能是客户块步长变了，请核对第 1 行表头）');
+    }
   }
 
   days.sort(function (a, b) { return (a < 26) - (b < 26) || (+a - +b); });
@@ -698,6 +773,12 @@ function colName(n) {
 }
 
 function archiveToSheet(D) {
+  /* ★ v2.9 起 CFG.ARCH_SHEET 默认为空 —— 归档搬到独立的中转簿了（见 CFG 注释）。
+     这里第一句就返回，连 sheet() 都不调，避免拿空表名去 Sheets.Item('') 试探。 */
+  if (!CFG.ARCH_SHEET) {
+    say('（归档落表已迁移到「成品油经营数据中转簿」，本簿不再写历史 —— 见 transit_sync.js）');
+    return;
+  }
   var sh = sheet(CFG.ARCH_SHEET);
   if (!sh) {
     say('（本簿没有「' + CFG.ARCH_SHEET + '」表，跳过归档落表 —— 新建一张同名空表即可启用）');
@@ -755,7 +836,11 @@ function archiveToSheet(D) {
       setCell(sh, colName(ARCH_ST_COL + k) + '1', ARCH_ST_HEAD[k]);
     }
   }
-  var ROWS = 600;
+  /* ★ 600 是「还没补历史」时的安全值，补完 2024-01～2026-10 历史后
+     N~V 区已有 1002 行（34 月 × 28~30 站）。若仍按 600 扫，
+     当前月的站级行会被判成「没见过」→ 从第 601 行起覆盖写，
+     把已有历史行整段冲掉。所以必须留足余量。 */
+  var ROWS = 3000;
   var grid = null;
   try { grid = sh.Range('N1:V' + ROWS).Value2; } catch (e) { grid = null; }
   var used = {};                                   // "会计月|站名" → 行号
