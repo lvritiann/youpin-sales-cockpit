@@ -820,21 +820,81 @@ payload = {'meta': {'generated': (datetime.datetime.utcnow() + datetime.timedelt
            'months': months, 'yearly': yearly,
            'daily_win': WINDOWS, 'last_date': LAST_DT.isoformat() if LAST_DT else ''}
 
-# ---- 前一日各站销量（日走势图上方那条极窄 KPI 条） ----
+# ---- 前一日各站销量（日走势图上方那条窄条） ----
 # 源：实时月逐日逐站（CUR['sale'][日]['stations']），按「对」合并成 15 项，小额单列第 16 项。
 # 取有数据的最后一天；小额在源表里是公司级、无站点，故独立成项（与站点排行口径一致）。
+# 除吨位外还带出「分油品量 / 柴汽单价」，供窄条画汽柴比与饼图。
+_FLOW = {}
+_FLOW_NOTE = ''
+_FLOW_Asof = ''
+_fp = os.path.join(BASE, '_flow.json')
+if os.path.exists(_fp):
+    try:
+        _fj = json.load(open(_fp, encoding='utf-8'))
+        _FLOW = _fj.get('stations') or {}
+        _FLOW_NOTE = _fj.get('note') or ''
+        _FLOW_Asof = _fj.get('asof') or ''
+    except Exception as _e:
+        print('[warn] _flow.json 解析失败，车流/单加留空：', _e)
+
+
+def _fuel_agg(cell, sts):
+    """把一对的两站分油品量合并"""
+    a = {'t': 0.0, 'gas': 0.0, 'diesel': 0.0, 'gL': 0.0, 'dL': 0.0, 'gA': 0.0, 'dA': 0.0,
+         't10': 0.0, 't0': 0.0, 't92': 0.0, 't95': 0.0}
+    for s in sts:
+        v = cell.get(s) or {}
+        for k in a:
+            a[k] += float(v.get(k) or 0)
+    return a
+
+
+def _price(amount, litres):
+    return round(amount / litres, 3) if litres else None
+
+
 _pd_day = max(cur_days, key=lambda x: int(x)) if cur_days else None
-_pd_items, _pd_x = [], 0.0
+_pd_items, _pd_x, _xiao_item = [], None, None
+_pd_sum = {'t': 0.0, 'gas': 0.0, 'diesel': 0.0, 'gL': 0.0, 'dL': 0.0, 'gA': 0.0, 'dA': 0.0}
 if _pd_day:
     _cell = CUR['sale'][_pd_day]['stations']
     for _pn, _sts in PAIR_ST.items():
         if _pn == XIAO:
             continue
-        _v = sum(float((_cell.get(s) or {}).get('t') or 0) for s in _sts)
-        if _v > 0:
-            _pd_items.append({'name': _pn, 't': round(_v, 1)})
+        _a = _fuel_agg(_cell, _sts)
+        if _a['t'] <= 0:
+            continue
+        _f = _FLOW.get(_pn) or {}
+        _pd_items.append({
+            'name': _pn,
+            't': round(_a['t'], 1),
+            'g': round(_a['gas'], 2),      # 汽油吨
+            'd': round(_a['diesel'], 2),   # 柴油吨
+            't92': round(_a['t92'], 2), 't95': round(_a['t95'], 2),
+            't0': round(_a['t0'], 2), 't10': round(_a['t10'], 2),
+            'gL': round(_a['gL'], 1), 'dL': round(_a['dL'], 1),
+            'gp': _price(_a['gA'], _a['gL']),   # 汽油单价 元/升
+            'dp': _price(_a['dA'], _a['dL']),   # 柴油单价 元/升
+            'gpt': _price(_a['gA'], _a['gas']),  # 元/吨
+            'dpt': _price(_a['dA'], _a['diesel']),
+            'fv': _f.get('v'),             # 日均车次
+            'fg': _f.get('vg'), 'fd': _f.get('vd'),
+            # 单加升数 汽/柴（保留 1 位，窄条里再长就显示不下）
+            'fsp': (round(_f['gp'], 1) if _f.get('gp') is not None else None),
+            'fdp': (round(_f['dp'], 1) if _f.get('dp') is not None else None),
+        })
+        for k in _pd_sum:
+            _pd_sum[k] += _a[k]
     _pd_items.sort(key=lambda x: -x['t'])
-    _pd_x = round(float(CUR['sale'][_pd_day].get('xiao', {}).get('t', 0)), 1)
+    # 小额配送：同样可拆柴汽（源表 -10/0/92/95 四列齐全），独立成第 16 项
+    _xr = CUR['sale'][_pd_day].get('xiao') or {}
+    _xt = round(float(_xr.get('t') or 0), 1)
+    _xg = round(float(_xr.get('gas') or 0), 2)
+    _xd = round(float(_xr.get('diesel') or 0), 2)
+    _pd_x = _xt
+    _xiao_item = {'name': XIAO, 't': _xt, 'g': _xg, 'd': _xd,
+                  # 有吨量但柴汽全 0 → 源表未拆，界面用斜纹占位，不臆造比例
+                  'un': bool(_xt > 0 and _xg + _xd <= 0)}
 
 prev_day = {
     'day': _pd_day,
@@ -842,7 +902,20 @@ prev_day = {
     'label': LAST_DT.strftime('%m-%d') if LAST_DT else '',
     'items': _pd_items,
     'xiao': _pd_x,
-    'total': round(sum(x['t'] for x in _pd_items) + _pd_x, 1),
+    # 合计用未取整的原始值算，避免「15 对合计」与「汽+柴」各差 0.2 的观感问题
+    'total': round(_pd_sum['t'] + (_pd_x or 0), 1),
+    # 窄条用：全公司口径的柴汽量与均价（合计行显示比价用）
+    'sum': {
+        't': round(_pd_sum['t'], 1),
+        'g': round(_pd_sum['gas'], 1),
+        'd': round(_pd_sum['diesel'], 1),
+        'gp': _price(_pd_sum['gA'], _pd_sum['gL']),
+        'dp': _price(_pd_sum['dA'], _pd_sum['dL']),
+    },
+    'xiao_fuel': {'t': _xt, 'g': _xg, 'd': _xd},
+    'xiao_item': _xiao_item,
+    'flow_note': _FLOW_NOTE,
+    'flow_asof': _FLOW_Asof,
 }
 payload['prev_day'] = prev_day
 
