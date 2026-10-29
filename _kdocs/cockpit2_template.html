@@ -168,24 +168,9 @@
   @media (max-width:1199px){ .pdgrid{grid-template-columns:repeat(3,minmax(0,1fr))} }
   @media (max-width:760px){ .pdgrid{grid-template-columns:repeat(2,minmax(0,1fr))} }
   @media (max-width:480px){ .pdgrid{grid-template-columns:minmax(0,1fr)} }
-  /* 1141~1330px 仍保 5 列，但卡会偏窄：值行收 0.5px，保证「合计 106.9 吨」不被截断；
-     同时把卡的内边距与图文间距收紧 1~2px，靠「挤空隙」而不是「缩字号」腾出宽度，
-     这样新增的「汽油 510 车次 · 34.94 升/次」两行在 1200px 也不会被切掉（实测 10px 溢出）。 */
-  @media (min-width:1200px) and (max-width:1330px){
-    .pdv{font-size:11px;letter-spacing:-.4px}
-    .pdv .u{font-size:9.5px}
-    /* 圆环放大到 46px 后文字区只剩这点宽度，1200px 实测差 2px（10 处截断），
-       把 gap 6→5、左右 padding 各收 1px 补回来，字号不动。 */
-    .pdc{gap:5px;padding:5px 4px 5px 4px}
-    /* 列间距 10→8：4 个间隙省 8px，均摊到 5 列各 +1.6px，
-       比继续压卡内 padding 更不伤文字（圆环放大后 1200px 实测 over=1px）。 */
-    .pdgrid{gap:8px 8px}
-    .pdp{width:46px;height:46px}
-    .pdv .mid{margin:0 2px}
-    .pdv.pdw{letter-spacing:-.45px}
-  }
-
-  .pdc{display:flex;gap:8px;align-items:flex-start;min-width:0;
+  /* align-items:center —— 圆环与右侧三行文字在卡片内整体垂直居中（2026-10-29 用户要求）：
+     原来 flex-start 会让圆环贴着上沿、下方留白不对称；居中后卡片视觉重心回到中线。 */
+  .pdc{display:flex;gap:8px;align-items:center;min-width:0;
     padding:6px 7px 6px 6px;border-radius:8px;background:#0b1622;
     border:1px solid #14243a}
   .pdc.zero{opacity:.42}
@@ -196,7 +181,7 @@
      54px 刚好与右侧三行文字（13px × 1.42 × 3 ≈ 55px）等高，卡片视觉更均衡。
      代价是文字区少了 10px，靠 .pdc 的 gap 9→8、padding 15→13 补回 3px，
      剩下 7px 用 probe_pd.py 在 1200~1440 各档实测确认无截断。 */
-  .pdp{flex:0 0 auto;width:54px;height:54px;display:block;margin-top:0}
+  .pdp{flex:0 0 auto;width:60px;height:60px;display:block;margin-top:0}
   .pdp .ring{fill:none;stroke:#17293c;stroke-width:7}
   .pdp .seg{fill:none;stroke-width:7;transition:stroke-dasharray .25s}
   .pdm{min-width:0;flex:1 1 auto;line-height:1.42}
@@ -223,6 +208,23 @@
   .pdv.pdw i.dd{background:#6fa8e8}
   .pdv.pdw .k{color:#8ba3bb}
   .pdv .mid{color:#33485f;margin:0 3px}
+
+  /* ★★★ 媒体查询必须写在上面所有 .pdv / .pdc / .pdp 默认规则【之后】★★★
+     2026-10-29 查出的真 bug：这一段原先放在默认规则之前，
+     而 CSS 层叠只认书写顺序、媒体查询本身不加优先级，
+     同选择器同名属性被后面 .pdc{gap:8px} / .pdp{60px} / .pdv{11.5px} 全部覆盖 ——
+     也就是说 1200~1330px 这一档的压缩规则从来没生效过，
+     该区间一直用 60px 圆环 + 11.5px 字号硬挤 5 列，文字被压成省略号。
+     现在整段挪到文件下方（.pdv .mid 之后），层叠顺序才对。 */
+  @media (min-width:1200px) and (max-width:1330px){
+    .pdv{font-size:11px;letter-spacing:-.4px}
+    .pdv .u{font-size:9px}
+    .pdc{gap:5px;padding:5px 4px 5px 4px}
+    .pdgrid{gap:8px 8px}
+    .pdp{width:46px;height:46px}
+    .pdv .mid{margin:0 2px}
+    .pdv.pdw{letter-spacing:-.45px}
+  }
   .cols{display:flex;align-items:flex-end;justify-content:center;gap:5px;height:228px;
     flex:none;padding-top:56px;overflow-x:clip;overflow-y:visible}
   .col{flex:1 1 auto;max-width:58px;min-width:9px;height:100%;display:flex;
