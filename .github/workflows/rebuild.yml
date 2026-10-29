@@ -55,6 +55,21 @@ jobs:
           fi
           python -c "import json;d=json.load(open('_kdocs/_flow.json',encoding='utf-8'));print('本次使用车流 asof',d.get('asof'),'站数',len(d.get('stations') or {}))"
 
+      # ★ 月底清表的「保命」环节：把当前会计月的完整 data.json 固化成文件。
+      #
+      #   填报簿每月 26 号清空重填，清空后上个月在金山文档里就没了 ——
+      #   过去唯一的保命手段是人工把 xlsx 下载到本地，忘一次就永久断档。
+      #   但 data.json 本身就是当前会计月的完整快照（含 sale 逐日逐站 / channels /
+      #   bigcust / trade），25 号那一次就已经是整月全量。
+      #
+      #   这里每次覆盖写 _archive/monthly/<会计月>.json：翻月后它自然停止更新，
+      #   永久冻结在 25 号那次的完整态。**幂等** —— 跑 1 次和跑 100 次结果一样。
+      #   内容没变时脚本内部会跳过写入，不产生无意义的 git diff。
+      #
+      #   脚本内部永远 exit 0：归档失败绝不能阻断页面重建。
+      - name: 归档月度快照（清表保命）
+        run: python _kdocs/archive_snapshot.py
+
       - name: 重建驾驶舱
         run: python _kdocs/build_cockpit2.py
 
@@ -63,15 +78,20 @@ jobs:
           cp cockpit/index.html index.html
           ls -l index.html
 
+      # ★ if: always() —— 页面重建就算挂了，归档也必须提交上去。
+      #   归档是「清表保命」的最后一环，优先级高于页面。
+      #   git add -A 而不是 git add：要能记录 daily 清理和月文件的删除。
       - name: 提交变更
+        if: always()
         run: |
           git config user.name  "cockpit-bot"
           git config user.email "cockpit-bot@users.noreply.github.com"
-          git add index.html
+          git add -A _archive/ index.html
           if git diff --cached --quiet; then
-            echo "页面无变化，跳过提交"
+            echo "无变化，跳过提交"
           else
             git commit -m "auto: rebuild cockpit $(date -u '+%m-%d %H:%M') UTC"
             git push
             echo "已提交"
+            git show --stat --oneline HEAD
           fi
