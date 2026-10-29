@@ -1,0 +1,54 @@
+name: rebuild-cockpit
+
+# 触发条件：金山 AirScript 定时推送 _incoming/data.json 后自动重建
+on:
+  push:
+    paths:
+      - '_incoming/data.json'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rebuild-cockpit
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 准备 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 应用最新日报数据
+        run: |
+          ls -l _incoming/data.json
+          python -c "import json;d=json.load(open('_incoming/data.json',encoding='utf-8'));print('天数',d['meta']['days_with_data'],'站数',d['meta']['station_count'])"
+          cp _incoming/data.json _kdocs/data.json
+
+      - name: 重建驾驶舱
+        run: python _kdocs/build_cockpit2.py
+
+      - name: 发布到站点根目录
+        run: |
+          cp cockpit/index.html index.html
+          ls -l index.html
+
+      - name: 提交变更
+        run: |
+          git config user.name  "cockpit-bot"
+          git config user.email "cockpit-bot@users.noreply.github.com"
+          git add index.html
+          if git diff --cached --quiet; then
+            echo "页面无变化，跳过提交"
+          else
+            git commit -m "auto: rebuild cockpit $(date -u '+%m-%d %H:%M') UTC"
+            git push
+            echo "已提交"
+          fi
