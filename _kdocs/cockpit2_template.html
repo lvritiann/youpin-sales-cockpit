@@ -159,31 +159,44 @@
   .pdnote b{color:#8298b0;font-weight:600}
 
   /* ---- 站点卡栅格：宽屏一行 5 个 × 3 行 = 15 座油站（不含小额），逐级降 ---- */
-  .pdgrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px 10px}
+  .pdgrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px 10px}
   /* 单站视角只有 1 张卡：别再按 5 列切，否则卡被挤到 90px 宽、文字全折行。
      两个类名的优先级高于下面任何 @media 里的单类名，窄屏也不会被覆盖回去。 */
   .pdgrid.one{grid-template-columns:minmax(0,300px)}
-  @media (max-width:1140px){ .pdgrid{grid-template-columns:repeat(3,minmax(0,1fr))} }
+  /* 5 列的下限提到 1200px：圆环放大后 1141~1199 这段再挤 5 列会截断 3px，
+     而该区间本来就窄，落回 3 列反而每张卡更宽松（圆环仍按 54px 渲染）。 */
+  @media (max-width:1199px){ .pdgrid{grid-template-columns:repeat(3,minmax(0,1fr))} }
   @media (max-width:760px){ .pdgrid{grid-template-columns:repeat(2,minmax(0,1fr))} }
   @media (max-width:480px){ .pdgrid{grid-template-columns:minmax(0,1fr)} }
   /* 1141~1330px 仍保 5 列，但卡会偏窄：值行收 0.5px，保证「合计 106.9 吨」不被截断；
      同时把卡的内边距与图文间距收紧 1~2px，靠「挤空隙」而不是「缩字号」腾出宽度，
      这样新增的「汽油 510 车次 · 34.94 升/次」两行在 1200px 也不会被切掉（实测 10px 溢出）。 */
-  @media (min-width:1141px) and (max-width:1330px){
-    .pdv{font-size:11px;letter-spacing:-.25px}
+  @media (min-width:1200px) and (max-width:1330px){
+    .pdv{font-size:11px;letter-spacing:-.4px}
     .pdv .u{font-size:9.5px}
-    .pdc{gap:7px;padding:6px 6px 6px 6px}
-    .pdp{width:42px;height:42px}
+    /* 圆环放大到 46px 后文字区只剩这点宽度，1200px 实测差 2px（10 处截断），
+       把 gap 6→5、左右 padding 各收 1px 补回来，字号不动。 */
+    .pdc{gap:5px;padding:5px 4px 5px 4px}
+    /* 列间距 10→8：4 个间隙省 8px，均摊到 5 列各 +1.6px，
+       比继续压卡内 padding 更不伤文字（圆环放大后 1200px 实测 over=1px）。 */
+    .pdgrid{gap:8px 8px}
+    .pdp{width:46px;height:46px}
     .pdv .mid{margin:0 2px}
-    .pdv.pdw{letter-spacing:-.4px}
+    .pdv.pdw{letter-spacing:-.45px}
   }
 
-  .pdc{display:flex;gap:9px;align-items:flex-start;min-width:0;
-    padding:7px 8px 7px 7px;border-radius:8px;background:#0b1622;
+  .pdc{display:flex;gap:8px;align-items:flex-start;min-width:0;
+    padding:6px 7px 6px 6px;border-radius:8px;background:#0b1622;
     border:1px solid #14243a}
   .pdc.zero{opacity:.42}
   .pdc.vx{border-color:#3b3018;background:#12100a}     /* 历史遗留：小额卡已不在本模块展示 */
-  .pdp{flex:0 0 auto;width:44px;height:44px;display:block;margin-top:1px}
+  /* 圆环 44 → 54px（2026-10-29 按用户要求放大）：
+     viewBox 固定 0 0 44 44，只改 CSS 尺寸 → 内部环径与线宽同比缩放，
+     线宽占比恒定 7/44，放大后不会变成「粗环」。
+     54px 刚好与右侧三行文字（13px × 1.42 × 3 ≈ 55px）等高，卡片视觉更均衡。
+     代价是文字区少了 10px，靠 .pdc 的 gap 9→8、padding 15→13 补回 3px，
+     剩下 7px 用 probe_pd.py 在 1200~1440 各档实测确认无截断。 */
+  .pdp{flex:0 0 auto;width:54px;height:54px;display:block;margin-top:0}
   .pdp .ring{fill:none;stroke:#17293c;stroke-width:7}
   .pdp .seg{fill:none;stroke-width:7;transition:stroke-dasharray .25s}
   .pdm{min-width:0;flex:1 1 auto;line-height:1.42}
@@ -1361,7 +1374,16 @@ function cols(w) {
     const xt = full ? (d.xt || 0) : 0;
     const h = Math.max(4, (d.t + xt) / mx * 142);
     const hr = (d.t + xt) ? d.t / (d.t + xt) * 100 : 100;
-    const hd = d.t ? Math.max(2, d.diesel / d.t * 100) : 100;
+    /* 柴油段高度 = 柴油 ÷ **柱总高（零售 + 小额）**，不是柴油 ÷ 零售。
+       ★ 2026-10-29 用户报「全口径下汽油部分缺柱」的根因就在这一行：
+         原来写 d.diesel / d.t * 100，那是「占零售的比例」，却当「占柱高的比例」用，
+         少乘了零售段占柱高的 hr。柱子的金色底=汽油，靠柴油（自底向上）与
+         小额（自顶向下）没盖住的部分露出来；两边一挤，汽油就被吃掉了。
+         实测 9/24：柴油该占 29.0% 被写成 55.7%，加小额 47.9% 合计 103.6% → 汽油消失；
+         10/17 合计 109.9%、10/22 合计 99.0%（只剩 1%，看着是空的）。
+         改成除以 (d.t + xt) 后，三段严格相加 = 100%，汽油可见比例恰好 = gas/(t+xt)。
+       xt=0（仅零售口径 / 单站视角）时分母等于 d.t，与改动前完全一致。 */
+    const hd = (d.t + xt) ? Math.max(2, d.diesel / (d.t + xt) * 100) : 100;
     const lb = d.lab || '';
     const amtLine = (d.amt === undefined || d.amt === null) ? '' : `<br>含税 ${n(d.amt)} 万`;
     return `<div class="col" style="--i:${i}">
