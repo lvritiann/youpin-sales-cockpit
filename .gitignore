@@ -1,0 +1,18 @@
+# ===== 构建中间产物（每次 CI 运行都会重新生成，不入库）=====
+# _kdocs/data.json 只是 _incoming/data.json 的副本，workflow 里用 cp 生成。
+# 入库会让仓库体积翻倍，且两份数据容易不同步。
+_kdocs/data.json
+
+# cockpit/ 是 build_cockpit2.py 的输出目录，最终由 workflow
+# 用 `cp cockpit/index.html index.html` 发布到站点根目录。
+# 只有根目录的 index.html 才是 Pages 实际入口，需要入库。
+cockpit/
+
+# ===== 本地调试产物 =====
+# 截图 / 诊断脚本的临时输出
+*.png
+!brand.png
+*.log
+
+# Excel/WPS 打开文件时产生的锁文件（不是合法 zip，openpyxl 会崩）
+~$*
