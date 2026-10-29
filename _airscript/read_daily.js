@@ -1,7 +1,12 @@
 /* ==========================================================================
- * 成品油日报 → GitHub _incoming/data.json   v2.6
+ * 成品油日报 → GitHub _incoming/data.json   v2.7
  * 运行位置：金山文档「202611销售及库存日报（新).xlsx」内的 AirScript
  * 触发方式：定时任务（8:30 / 9:00 / 9:30 / 10:00 / 11:30 各挂一条，跑同一个 main）
+ *
+ * v2.7 变更（2026-10-29，修「每月 26 号必然误拦」）
+ *  ★ 体积护栏在新会计月起步时会连拦 8 天：26 号清表后只剩 1 天数据，
+ *    UTF-8 体积约为月末的 1/30，被判成「读表不全」，而页面会一直停在旧会计月。
+ *    现在加了「会计月起步放行」：本次最早日块 = 会计月首日时跳过体积护栏。
  *
  * v2.6 变更（2026-10-29，修体积护栏误伤）
  *  1) ★ 护栏原先拿 json.length（JS 字符数）去比 GitHub 返回的 size（字节数）。
@@ -70,7 +75,7 @@
  *  4) 全零日块 = 未填报，跳过（不可补零，会把日均拉低）。
  * ========================================================================== */
 
-var VER = 'v2.6';
+var VER = 'v2.7';
 
 var CFG = {
   OWNER : 'lvritiann',
@@ -723,6 +728,20 @@ function main() {
       say('令牌来源：' + tokFrom);
     }
 
+    /* ★ 会计月起步放行（v2.7）
+       每月 26 号清表后，新会计月只有 1 天数据，UTF-8 体积天然只有月末的 1/30。
+       体积护栏会把它当成「读表不全」拦下，而且会**连拦 8 天**（直到累计到 85%），
+       那 8 天页面上一直是旧会计月的数字 —— 比不推更糟。
+       判据：本次最早的一个日块就是会计月第一天（26 号）→ 处于月初起步阶段，放行。
+       月中某天读表不全时 days[0] 不是 26 号，护栏照旧生效。 */
+    var _acStart = String((D.meta && D.meta.accounting_month) || '').split('~')[0].trim();
+    var _acDay = _acStart.indexOf('-') >= 0 ? _acStart.split('-')[2] : '';
+    var _isMonthStart = !!(days.length && _acDay
+      && parseInt(days[0], 10) === parseInt(_acDay, 10));
+    if (_isMonthStart) {
+      say('本会计月刚起步（首日 ' + _acStart + '，共 ' + days.length + ' 天），体积护栏放行');
+    }
+
     var cur = ghGet(tok);
     if (cur && cur.content) {
       var same = String(cur.content).replace(/\s/g, '');
@@ -743,7 +762,7 @@ function main() {
          实测 70,555 字符 ↔ 78,687 字节。拿字符数比字节数，
          一次正常的「长小数截到 4 位」（体积本就该降）被算成 84.7%，
          差点误判成读表不全。 */
-    if (cur && cur.size > 1000) {
+    if (cur && cur.size > 1000 && !_isMonthStart) {
       var nBytes = utf8Len(json);
       var ratio = nBytes / cur.size;
       if (ratio < 0.85) {
