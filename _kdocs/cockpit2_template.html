@@ -140,69 +140,72 @@
   /* ---- 前一日各站销量：日走势柱图正上方的一条极窄小字带 ----
      只占一行高（≈22px），16 项小字横排；窄屏自动换行，不撑高卡片。
      数字用 tabular-nums，保证小数点对齐、一眼能扫出高低。 */
-  .pdbar{padding:9px 0 10px;margin:2px 0 12px;font-size:12.5px;line-height:1.5;
+  .pdbar{padding:10px 0 11px;margin:2px 0 12px;font-size:13px;line-height:1.55;
     border-top:1px solid #14263a;border-bottom:1px solid #14263a;color:#93aac4}
   .pdbar:empty{display:none}
 
   /* ---- 头行：日期 / 合计 / 比项切换 / 单位legend ---- */
   .pdhead{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;margin-bottom:8px}
-  .pdbar .pdk{color:#b6c9de;font-weight:600;white-space:nowrap;letter-spacing:.2px;font-size:12.5px}
+  .pdbar .pdk{color:#b6c9de;font-weight:600;white-space:nowrap;letter-spacing:.2px;font-size:13.5px}
   .pdbar .pdt{color:#e8cf95;font-weight:700;font-variant-numeric:tabular-nums;
-    white-space:nowrap;font-size:14.5px}
+    white-space:nowrap;font-size:16px}
   .pdseg{display:inline-flex;gap:1px;border:1px solid #1b3550;border-radius:6px;
     padding:1px;background:#0a1521}
-  .pdseg button{background:none;border:0;color:#7e93ab;font-size:11px;padding:1.5px 7px;
+  .pdseg button{background:none;border:0;color:#7e93ab;font-size:12px;padding:2px 8px;
     border-radius:4px;cursor:pointer;font-family:inherit;white-space:nowrap;line-height:1.45}
   .pdseg button.on{background:#16304a;color:#f0d9a8;font-weight:600}
   .pdseg button:hover{color:#cbdcee}
-  .pdnote{color:#5f7691;font-size:10.5px;white-space:nowrap}
+  .pdnote{color:#6b829a;font-size:11px;white-space:nowrap}
   .pdnote b{color:#8298b0;font-weight:600}
 
-  /* ---- 站点卡栅格：宽屏 6 列（卡宽约 220px，够放「汽/柴/合计/均价/车次/单加」全标签），逐级降 ---- */
-  .pdgrid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px 8px}
-  /* 单站视角只有 1 张卡：别再按 6 列切，否则卡被挤到 90px 宽、文字全折行。
+  /* ---- 站点卡栅格：宽屏一行 5 个 × 3 行 = 15 座油站（不含小额），逐级降 ---- */
+  .pdgrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px 10px}
+  /* 单站视角只有 1 张卡：别再按 5 列切，否则卡被挤到 90px 宽、文字全折行。
      两个类名的优先级高于下面任何 @media 里的单类名，窄屏也不会被覆盖回去。 */
-  .pdgrid.one{grid-template-columns:minmax(0,268px)}
-  @media (max-width:1340px){ .pdgrid{grid-template-columns:repeat(5,minmax(0,1fr))} }
-  @media (max-width:1120px){ .pdgrid{grid-template-columns:repeat(4,minmax(0,1fr))} }
-  @media (max-width:900px){ .pdgrid{grid-template-columns:repeat(3,minmax(0,1fr))} }
-  @media (max-width:640px){ .pdgrid{grid-template-columns:repeat(2,minmax(0,1fr))} }
-  @media (max-width:430px){ .pdgrid{grid-template-columns:minmax(0,1fr)} }
+  .pdgrid.one{grid-template-columns:minmax(0,300px)}
+  @media (max-width:1140px){ .pdgrid{grid-template-columns:repeat(3,minmax(0,1fr))} }
+  @media (max-width:760px){ .pdgrid{grid-template-columns:repeat(2,minmax(0,1fr))} }
+  @media (max-width:480px){ .pdgrid{grid-template-columns:minmax(0,1fr)} }
+  /* 1141~1330px 仍保 5 列，但卡会偏窄：值行收 0.5px，保证「合计 106.9t」不被截断 */
+  @media (min-width:1141px) and (max-width:1330px){
+    .pdv{font-size:11px;letter-spacing:-.25px}
+    .pdv .u{font-size:9.5px}
+  }
 
-  .pdc{display:flex;gap:7px;align-items:flex-start;min-width:0;
-    padding:5px 6px 5px 5px;border-radius:7px;background:#0b1622;
+  .pdc{display:flex;gap:9px;align-items:flex-start;min-width:0;
+    padding:7px 8px 7px 7px;border-radius:8px;background:#0b1622;
     border:1px solid #14243a}
   .pdc.zero{opacity:.42}
-  .pdc.vx{border-color:#3b3018;background:#12100a}     /* 小额配送（虚拟实体） */
-  .pdp{flex:0 0 auto;width:34px;height:34px;display:block;margin-top:2px}
-  .pdp .ring{fill:none;stroke:#17293c;stroke-width:6}
-  .pdp .seg{fill:none;stroke-width:6;transition:stroke-dasharray .25s}
-  .pdm{min-width:0;flex:1 1 auto;line-height:1.34}
-  .pdn{display:flex;align-items:baseline;gap:5px;font-size:11.5px;color:#dbe7f4;
-    font-weight:640;white-space:nowrap;overflow:hidden;margin-bottom:1px}
+  .pdc.vx{border-color:#3b3018;background:#12100a}     /* 历史遗留：小额卡已不在本模块展示 */
+  .pdp{flex:0 0 auto;width:44px;height:44px;display:block;margin-top:1px}
+  .pdp .ring{fill:none;stroke:#17293c;stroke-width:7}
+  .pdp .seg{fill:none;stroke-width:7;transition:stroke-dasharray .25s}
+  .pdm{min-width:0;flex:1 1 auto;line-height:1.42}
+  .pdn{display:flex;align-items:baseline;gap:6px;font-size:13px;color:#dbe7f4;
+    font-weight:640;white-space:nowrap;overflow:hidden;margin-bottom:2px}
   .pdn .nm{overflow:hidden;text-overflow:ellipsis}
   .pdn .pdr{color:#f0d9a8;font-weight:700;font-variant-numeric:tabular-nums;
-    margin-left:auto;flex:0 0 auto;font-size:11.5px}
-  .pdv{color:#8fa6bd;font-size:10px;white-space:nowrap;overflow:hidden;
+    margin-left:auto;flex:0 0 auto;font-size:13px}
+  .pdv{color:#93aac4;font-size:11.5px;white-space:nowrap;overflow:hidden;
     text-overflow:ellipsis;font-variant-numeric:tabular-nums;letter-spacing:-.1px}
-  .pdv b{font-weight:660;color:#c3d5e8}
+  .pdv b{font-weight:660;color:#cfe0f1}
   .pdv .gg{color:#e0b96a}
   .pdv .dd{color:#6fa8e8}
-  .pdv .u{color:#5c7290;font-size:9px}
-  .pdv .k{color:#7d93ab}                              /* 「汽」「柴」「合计」「均价」「车次」「单加」标签 */
-  .pdv .sep{color:#3f5570;margin:0 1px}                /* 分隔点 */
-  .pdv.pdz{color:#71889f}
+  .pdv .u{color:#657b95;font-size:10px}
+  .pdv .k{color:#849bb2}                              /* 「汽」「柴」「合计」「均价」「车次」「单加」标签 */
+  .pdv .sep{color:#3f5570;margin:0 2px}                /* 分隔点 */
+  .pdv.pdz{color:#7b93aa}
   .cols{display:flex;align-items:flex-end;justify-content:center;gap:5px;height:228px;
     flex:none;padding-top:56px;overflow-x:clip;overflow-y:visible}
   .col{flex:1 1 auto;max-width:58px;min-width:9px;height:100%;display:flex;
     flex-direction:column;justify-content:flex-end;align-items:center;gap:4px;position:relative}
-  .col .bv{min-height:12px;font-size:10px;color:#a9c0d8;font-weight:600;font-variant-numeric:tabular-nums;line-height:1;
+  .col .bv{min-height:13px;font-size:11px;color:#b6cde3;font-weight:600;font-variant-numeric:tabular-nums;line-height:1;
     white-space:nowrap;letter-spacing:-.2px}
   .col .bar{width:100%;max-width:26px;border-radius:3px 3px 1px 1px;position:relative;
     overflow:hidden;background:linear-gradient(180deg,#f0d9a8,#b8934a);transition:height .45s}
   .col .bar>u{position:absolute;left:0;right:0;bottom:0;
     background:linear-gradient(180deg,#3f8fd0,#1d4d7c)}
-  .col .lb{font-size:9px;color:#6d829c;font-variant-numeric:tabular-nums}
+  .col .lb{font-size:10px;color:#7d92ac;font-variant-numeric:tabular-nums}
   .col:hover .bar{box-shadow:0 0 0 2px rgba(56,189,248,.45)}
   .col .tip{position:absolute;bottom:calc(100% - 10px);left:50%;transform:translateX(-50%);
     background:#0b1622;color:#fff;font-size:11px;line-height:1.6;padding:7px 11px;
@@ -1571,13 +1574,16 @@ const PD_RATIO = [
     { k: '92#', c: '#e0b96a', v: x => x.t92 }, { k: '95#', c: '#f5dfae', v: x => x.t95 },
     { k: '0#', c: '#4a90d9', v: x => x.t0 }, { k: '-10#', c: '#93bdec', v: x => x.t10 }] },
 ];
-const PDC = 2 * Math.PI * 13;                       // 环形饼周长（r=13）
+const PDC = 2 * Math.PI * 17;                       // 环形饼周长（r=17，放大后）
 const _r1 = v => { const s = (Math.round(v * 10) / 10).toFixed(1); return s.endsWith('.0') ? s.slice(0, -2) : s; };
 const _i0 = v => (v == null || v === '') ? '—' : Math.round(v).toLocaleString('zh-CN');
+/* 吨位固定 1 位小数：6 也要显示成 6.0，否则和相邻的 93.6 对不齐、看着像漏了位 */
+const _f1 = v => (v == null || v === '') ? '—' : (Math.round(v * 10) / 10).toFixed(1);
+
 
 /* 通用 N 段环形饼：value 数组 + 颜色数组，按顺时针从 12 点起铺 */
 function pdPie(vals, cols) {
-  let o = '<circle class="ring" cx="17" cy="17" r="13"/>';
+  let o = '<circle class="ring" cx="22" cy="22" r="17"/>';
   const vs = (vals || []).map(v => Math.max(0, +v || 0));
   const tot = vs.reduce((a, b) => a + b, 0);
   if (!tot) return o;
@@ -1585,9 +1591,9 @@ function pdPie(vals, cols) {
   vs.forEach((v, i) => {
     if (v <= 0) return;
     const L = PDC * v / tot;
-    o += `<circle class="seg" cx="17" cy="17" r="13" stroke="${cols[i] || '#5c7590'}"`
+    o += `<circle class="seg" cx="22" cy="22" r="17" stroke="${cols[i] || '#5c7590'}"`
       + ` stroke-dasharray="${L.toFixed(2)} ${(PDC - L).toFixed(2)}"`
-      + ` stroke-dashoffset="${(-acc).toFixed(2)}" transform="rotate(-90 17 17)"/>`;
+      + ` stroke-dashoffset="${(-acc).toFixed(2)}" transform="rotate(-90 22 22)"/>`;
     acc += L;
   });
   return o;
@@ -1608,10 +1614,10 @@ function pdCard(it, rs) {
   const zero = !(it.t > 0);
   /* 车流/单加全部来自各站 V1「今日填报」前一日两行实报值，不加约等号 */
   const hasFlow = (it.fv != null);
-  const gTxt = un ? '—' : n(it.g);
-  const dTxt = un ? '—' : n(it.d);
+  const gTxt = un ? '—' : _f1(it.g);
+  const dTxt = un ? '—' : _f1(it.d);
   /* t 在 build 端已按「汽+柴（均取 1 位）相加」算好，直接显示即自洽 */
-  const sumTxt = n(it.t);
+  const sumTxt = _f1(it.t);
   const pTxt = (v) => v == null ? '—' : v.toFixed(2);
   const sep = '<span class="sep">·</span>';
   return `<div class="pdc${zero ? ' zero' : ''}${it.name === '小额配送' ? ' vx' : ''}"`
@@ -1619,13 +1625,13 @@ function pdCard(it, rs) {
     + `　平均单价 汽${pTxt(it.gp)} 柴${pTxt(it.dp)} 元/L`
     + (hasFlow ? `　前一日总车次 ${it.fv}（汽 ${it.fg} / 柴 ${it.fd}）`
       + `　平均单加 汽 ${it.fsp} / 柴 ${it.fdp} 升/次` : '　无车流数据') + `">`
-    + `<svg class="pdp" viewBox="0 0 34 34">${pdPie(un ? [] : vals, rs.it.map(s => s.c))}</svg>`
+    + `<svg class="pdp" viewBox="0 0 44 44">${pdPie(un ? [] : vals, rs.it.map(s => s.c))}</svg>`
     + '<div class="pdm">'
     +   `<div class="pdn"><span class="nm">${it.name}</span><span class="pdr">${rt}</span></div>`
-    // ① 分油品吨 + 合计吨
+    // ① 分油品吨 + 合计吨（单位只在行尾出一次，省出宽度给「合计」；不再用 · 分隔）
     +   `<div class="pdv"><span class="k">汽</span><span class="gg">${gTxt}</span>`
-    +     `<span class="u">t</span> ${sep} <span class="k">柴</span><span class="dd">${dTxt}</span>`
-    +     `<span class="u">t</span> ${sep} <span class="k">合计</span><b>${sumTxt}</b>`
+    +     ` <span class="k">柴</span><span class="dd">${dTxt}</span>`
+    +     ` <span class="k">合计</span><b>${sumTxt}</b>`
     +     `<span class="u">t</span>${un ? '<span class="u"> 未拆</span>' : ''}</div>`
     // ② 平均单价（元/升，加权 = 金额÷升数）
     +   `<div class="pdv"><span class="k">均价</span>`
@@ -1653,22 +1659,17 @@ function renderPd(P) {
   const items = PD.items || [];
   if (!items.length) { box.innerHTML = ''; return; }
   const XIAO_TAG = '小额配送';
-  const isFull = SCP === 'full';
-  const xi = isFull ? (PD.xiao_item || null) : null;
+  /* ★ 本模块只展示 15 座油站，小额配送不在此处体现（用户 2026-10-29 要求）。
+     顶部口径条选中「小额配送」时整条隐藏，而不是留一张空卡。 */
+  if (P && P.name === XIAO_TAG) { box.innerHTML = ''; return; }
 
   let who, list, sumT, sumG = null, sumD = null, gp = null, dp = null;
   if (!P) {
     who = '15 对';
-    list = items.slice();
-    if (xi) list = list.concat([xi]);
-    sumT = PD.total != null ? PD.total : list.reduce((a, x) => a + x.t, 0);
+    list = items.slice();                       // 恒 15 项，不拼小额
     const s0 = PD.sum || {};
+    sumT = s0.t != null ? s0.t : list.reduce((a, x) => a + x.t, 0);
     sumG = s0.g; sumD = s0.d; gp = s0.gp; dp = s0.dp;
-  } else if (P.name === XIAO_TAG) {
-    who = XIAO_TAG;
-    list = [xi || { name: XIAO_TAG, t: PD.xiao || 0, g: 0, d: 0, un: true }];
-    sumT = PD.xiao || 0;
-    sumG = list[0].g; sumD = list[0].d;
   } else {
     const one = items.find(x => x.name === P.name);
     if (!one) { box.innerHTML = ''; return; }
