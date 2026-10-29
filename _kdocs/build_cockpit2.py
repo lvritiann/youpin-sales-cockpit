@@ -495,6 +495,39 @@ _XA[str(CUR_Y)] = round(_XA.get(str(CUR_Y), 0) + live_xt, 1)
 PAIR_ANN[XIAO] = _XA
 yearly['pair_annual'] = PAIR_ANN
 yearly['pair_stations_all'] = _PAIRS_ALL
+
+# ---- 年度同比基数：2026 vs 2025 同期（会计月 1..N，N = 2026 已有完整月数）----
+# ★ 2026 是部分年度（到 10-28 只走完 1–10 月 + 11 月 3 天），拿它比 2025 全年
+#   会得出一个假的大幅下滑；比 2024 更是答非所问。所以分子分母必须同窗口：
+#   2026 列的窗口 = SER 里 2026 的全部会计月（= _base_mons），
+#   2025 同期    = SER 里同月号的 2025 各月相加。
+#   数据源统一走 SER（日块逐站），与 2026 列同源，不混月累计口径。
+_bm = [int(x) for x in _base_mons]
+_st2pair = {}
+for _pn, _sts in (SA.get('pair_stations') or {}).items():
+    for _s in _sts:
+        _st2pair[_s] = _pn
+_pair_same, _st_same = {}, {}
+for _m in _bm:
+    _ym = '%s%02d' % (PRE_Y, _m)
+    for _sn, _rec in (SER['months'].get(_ym) or {}).items():
+        _t = float(_rec.get('t') or 0)
+        if _t <= 0:
+            continue
+        _pn = _sn if _sn == XIAO else _st2pair.get(_sn)
+        if not _pn:
+            continue
+        _pair_same[_pn] = _pair_same.get(_pn, 0.0) + _t
+        _st_same[_sn] = _st_same.get(_sn, 0.0) + _t
+yearly['pair_prev_same'] = {k: round(v, 1) for k, v in _pair_same.items()}
+yearly['station_prev_same'] = {k: round(v, 1) for k, v in _st_same.items()}
+yearly['yoy_base'] = {
+    'prev_year': PRE_Y, 'cur_year': CUR_Y, 'months': _bm,
+    'cur_months': sorted({int(k[4:]) for k in SER['months'] if k.startswith(str(CUR_Y))}),
+    'label': '%d 会计月 1–%d 月' % (PRE_Y, max(_bm)) if _bm else '',
+    'note': '%d 同期 = %d 年会计月 1–%d 月合计（与 %d 列同一窗口）'
+            % (PRE_Y, PRE_Y, max(_bm), CUR_Y) if _bm else '',
+}
 yearly['xiao'] = {
     'name': XIAO, 'road': '公司级', 'stations': [XIAO],
     't26': round(_XA.get('2026', 0), 1),
