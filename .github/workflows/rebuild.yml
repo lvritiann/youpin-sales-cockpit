@@ -37,17 +37,23 @@ jobs:
           cp _incoming/data.json _kdocs/data.json
 
       # 车流是独立的一条链路（15 个非油 V1 报表，销售日报里没有车次字段）。
-      # 收到 AirScript 推的 flow.json 就覆盖仓库快照；没收到（比如 AirScript 当天失败）
-      # 就沿用 _kdocs/_flow.json 里上一次的快照，页面照常出，只是车流停在旧日期。
-      - name: 应用最新车流数据
+      # 收到 AirScript 推的 flow.json 先过一遍校验：站数够不够、逐站「总车次=汽+柴」、
+      # check 合计与逐站加总是否一致、asof 有没有跑到未来。
+      # 不合格就**不采用**，沿用 _kdocs/_flow.json 里上一次的快照 ——
+      # 页面照常出（销量/金额照常更新），只是车流停在旧日期，绝不把缺站的数字摆上台面。
+      - name: 应用最新车流数据（先校验）
         run: |
           if [ -f _incoming/flow.json ]; then
-            cp _incoming/flow.json _kdocs/_flow.json
-            python -c "import json;d=json.load(open('_kdocs/_flow.json',encoding='utf-8'));print('车流 asof',d.get('asof'),'站数',len(d.get('stations') or {}))"
+            if python _kdocs/verify_flow.py _incoming/flow.json _kdocs/_flow.json; then
+              cp _incoming/flow.json _kdocs/_flow.json
+              echo "✅ 已采用本次车流数据"
+            else
+              echo "::warning::车流数据未通过校验，本次沿用 _kdocs/_flow.json 旧快照"
+            fi
           else
             echo "未收到 _incoming/flow.json —— 沿用 _kdocs/_flow.json 里的现有快照"
-            python -c "import json;d=json.load(open('_kdocs/_flow.json',encoding='utf-8'));print('沿用 asof',d.get('asof'))"
           fi
+          python -c "import json;d=json.load(open('_kdocs/_flow.json',encoding='utf-8'));print('本次使用车流 asof',d.get('asof'),'站数',len(d.get('stations') or {}))"
 
       - name: 重建驾驶舱
         run: python _kdocs/build_cockpit2.py
