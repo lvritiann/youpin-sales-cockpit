@@ -493,6 +493,66 @@
     box-shadow:0 0 18px -6px rgba(217,184,120,.75)}
   .ycol .n{font-size:12px;font-weight:660;font-variant-numeric:tabular-nums;color:var(--ink)}
   .ycol .l{font-size:10.5px;color:var(--sub)}
+
+  /* ===== 历年销量对比：三色堆叠柱（柴油 / 汽油 / 小额配送） =====
+     与「会计月轨迹」共用同一套色号（s1 柴油蓝 / s2 汽油金 / s3 小额灰蓝），
+     跨图一致才不会让人重学一遍配色。 */
+  #ytrack{gap:34px;padding:6px 10px 0}
+  #ytrack .ycol{gap:6px}
+  /* 柱槽：柱子的 px 高度要相对这块弹性槽解析，标签再多也挤不扁柱子 */
+  #ytrack .bw{flex:1 1 auto;width:100%;min-height:46px;display:flex;
+    flex-direction:column;justify-content:flex-end;align-items:center}
+  #ytrack .bw .n{font-size:12px;font-weight:660;font-variant-numeric:tabular-nums;
+    color:var(--ink);white-space:nowrap;line-height:1.4;margin-bottom:3px}
+  #ytrack .bw .bar{flex:none}
+  #ytrack .bw .bar.stk{display:flex;flex-direction:column-reverse;overflow:hidden;
+    width:100%;max-width:100px;border-radius:5px 5px 1px 1px;background:transparent;
+    box-shadow:0 0 20px -6px rgba(74,143,201,.7);transition:height .55s}
+  #ytrack .bw .bar.stk>i{display:block;width:100%;flex:none;transition:height .55s}
+  #ytrack .bw .bar.stk>i.s1{background:linear-gradient(180deg,#4a9fe0,#1d4d7c)}
+  #ytrack .bw .bar.stk>i.s2{background:linear-gradient(180deg,#f0d9a8,#b8934a)}
+  #ytrack .bw .bar.stk>i.s3{background:linear-gradient(180deg,#708aa6,#3f5470)}
+  /* 「未拆分」：2023 来自台账、源表不拆柴汽，用斜纹占位，绝不臆造比例 */
+  #ytrack .bw .bar.stk>i.s0{
+    background:repeating-linear-gradient(45deg,#3f5670,#3f5670 5px,#2a3b4f 5px,#2a3b4f 10px)}
+  #ytrack .ycol.now .bw .bar.stk{box-shadow:0 0 24px -5px rgba(217,184,120,.8)}
+  #ytrack .ycol.now .bw .n{color:var(--gold2)}
+  /* 图例 */
+  .yleg{display:flex;flex-wrap:wrap;align-items:center;gap:16px;
+    font-size:10.5px;color:var(--sub);margin:0 0 6px;padding-left:8px}
+  .yleg span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+  .yleg i{width:11px;height:11px;border-radius:2px;display:block;flex:none}
+  .yleg i.c1{background:linear-gradient(180deg,#4a9fe0,#1d4d7c)}
+  .yleg i.c2{background:linear-gradient(180deg,#f0d9a8,#b8934a)}
+  .yleg i.c3{background:linear-gradient(180deg,#647f9c,#3b5069)}
+  .yleg i.c0{background:repeating-linear-gradient(45deg,#3f5670,#3f5670 3px,#2a3b4f 3px,#2a3b4f 6px)}
+
+  /* ===== 历年对比表：固定列宽 + 表头钉住 =====
+     原表 table-layout:auto，第一列被「实时 N 天」标签撑到 203px，
+     数字全挤在右侧、表头 10px 又比正文小一号，读起来像没对齐。
+     改成 fixed 布局后列宽由 colgroup 决定，表头与数字右边界必然重合。 */
+  #ytbl{table-layout:fixed;width:100%}
+  #ytbl col.c-m{width:86px}
+  #ytbl col.c-y{width:78px}
+  #ytbl th,#ytbl td{padding:5.5px 8px}
+  #ytbl thead th{font-size:11px;font-weight:660;letter-spacing:.2px;
+    color:#a8bdd4;background:#0a1521;position:sticky;top:0;z-index:2;
+    box-shadow:inset 0 -1px 0 #1b3350}
+  #ytbl thead th.his{color:#6b7f97;font-weight:560}
+  #ytbl thead th.now{color:var(--gold2)}
+  #ytbl td{font-variant-numeric:tabular-nums}
+  #ytbl td.his{color:#7b8fa7}
+  #ytbl tbody tr:last-child td{border-bottom:0}
+  #ytbl tr.live td{background:rgba(217,184,120,.045)}
+  #ytbl tr.live td:first-child{color:var(--gold2);font-weight:620;
+    box-shadow:inset 2px 0 0 var(--gold)}
+  #ytbl td em{display:block;font-style:normal;font-size:9px;font-weight:500;
+    color:var(--gold);line-height:1.3;letter-spacing:-.2px}
+  .ytitle{display:flex;align-items:baseline;justify-content:space-between;
+    gap:10px;font-size:10.5px;color:var(--sub);margin-bottom:8px}
+  .ytitle span{font-size:9.5px;color:#4d6480;white-space:nowrap}
+  .ytblbox{max-height:470px;overflow:auto}
+
   /* 6 个月跨度：每月多两行小字（区间 / 同比），柱间距与字号相应收紧 */
   #mtrack{gap:14px;padding:6px 2px 0}
   #mtrack .ycol{gap:4px;justify-content:flex-end}
@@ -722,6 +782,19 @@
   .mtbl th.his,.mtbl td.his{color:#6b7f97}
   .mtbl th.his{font-weight:500}
 
+  /* ===== 数据健康红条：只在 archive_snapshot.py 报出 alert 时出现 =====
+     平时 display:none，完全不占版面。定位是「无人值守的告警出口」——
+     用户每天看这一屏，比让他去仓库翻 HEALTH.json 可靠得多。 */
+  #hbar{display:none;max-width:1560px;margin:0 auto 12px;padding:10px 15px;
+    border-radius:9px;background:rgba(214,74,62,.13);
+    border:1px solid rgba(222,102,90,.52);color:#ffbcb4;
+    font-size:12.5px;line-height:1.62;letter-spacing:.1px}
+  #hbar.show{display:block}
+  #hbar b{color:#ff9a8e;font-weight:620;margin-right:6px}
+  #hbar i{font-style:normal;color:#c9958f}
+  #hbar code{font-family:var(--mono,monospace);font-size:11.5px;
+    background:rgba(0,0,0,.22);padding:1px 5px;border-radius:4px;color:#e8b0a8}
+
   @media (prefers-reduced-motion:reduce){
     .bl .fl,.col .bar,.ycol .bar,.donut,.kpi{animation:none!important}
   }
@@ -750,6 +823,9 @@
       <div class="chip">更新 <b id="c-gen"></b></div>
     </div>
   </div>
+
+  <!-- 数据健康红条：默认空，由 D.health 决定是否显示 -->
+  <div id="hbar"></div>
 
   <!-- 视角层（L1）：全公司 ↔ 单站（= 一对）。切换在页顶，同时决定下面所有模块的取数范围 -->
   <div class="vbar" id="vbar">
@@ -897,12 +973,19 @@
       <div class="h"><h2>历年销量对比</h2><span id="y-span"></span></div>
       <div class="ygrid">
         <div>
-          <div class="yrow" id="ytrack" style="height:176px"></div>
+          <div class="yleg" id="yleg">
+            <span><i class="c1"></i>柴油</span>
+            <span><i class="c2"></i>汽油</span>
+            <span><i class="c3"></i>小额配送</span>
+            <span><i class="c0"></i>未拆分（2023 台账）</span>
+          </div>
+          <div class="yrow" id="ytrack" style="height:236px"></div>
           <div class="warn note" id="ynote" style="margin-top:14px"></div>
         </div>
         <div>
-          <div style="font-size:10.5px;color:var(--sub);margin-bottom:8px">各月销量对比（吨）与同比</div>
-          <div style="max-height:372px;overflow:auto">
+          <div class="ytitle"><b>各月销量对比（吨）与同比</b>
+            <span>同比 = 2026 ÷ 2025 同期 − 1</span></div>
+          <div class="ytblbox">
             <table class="mtbl" id="ytbl"></table>
           </div>
         </div>
@@ -2039,8 +2122,13 @@ function render() {
   if (vg) vg.style.display = P ? '' : 'none';
 
   if (!P) {
-    const clTop = m.clients.slice(0, 5);
-    const clOther = m.clients.slice(5).reduce((s, x) => s + x.t, 0);
+    /* ★ 客户表头为空的行已统一归入「其他」。它不该占前 5 名图例的位置，
+       而要并进末尾的「其他客户」聚合段 —— 否则会出现「其他」和「其他客户」两行。 */
+    const OTH = '其他';
+    const namedCl = m.clients.filter(c => c.name !== OTH);
+    const othT = m.clients.filter(c => c.name === OTH).reduce((s, x) => s + (x.t || 0), 0);
+    const clTop = namedCl.slice(0, 5);
+    const clOther = namedCl.slice(5).reduce((s, x) => s + x.t, 0) + othT;
     const clSegs = clOther > 0 ? clTop.concat([{ name: '其他客户', t: +clOther.toFixed(1),
       share: +(clOther / m.big_t * 100).toFixed(1) }]) : clTop;
     donut($('#cdonut'), clSegs, $('#cd-v'), n(m.big_t));
@@ -2106,10 +2194,30 @@ function yearly() {
 
   const mx = Math.max(...ys.map(annualOf), 1);
   const lastY = ys[ys.length - 1];
+  /* ★ 三色堆叠：柴油（s1）/ 汽油（s2）/ 小额配送（s3），柱高仍=当年合计。
+     柴油取 build 侧 yearly.diesel_annual，汽油由「零售 − 柴油」反推，
+     保证每根柱三段之和严格等于柱顶那个总数（不能各段独立四舍五入后再拼，
+     否则 2024 会差 0.03 吨、2026 差 0.1 吨，柱顶数字与柱子对不上）。
+     2023 台账不拆柴汽 → 整段画斜纹 s0，不臆造比例。 */
+  const DI = Y.diesel_annual || {};
   $('#ytrack').innerHTML = ys.map((y, i) => {
-    const v = annualOf(y), isLast = y === lastY;
-    return `<div class="ycol" style="--i:${i}"><div class="n">${n(v)}</div>
-      <div class="bar ${isLast ? 'now' : ''}" style="height:${Math.max(8, v / mx * 96)}px"></div>
+    const k = String(y), v = annualOf(y), isLast = y === lastY;
+    const x = FULL ? xiaoOf(y) : 0;                  // 小额只在全口径下成段
+    const ret = Math.max(0, v - x);                  // 零售段
+    const pct = q => (v > 0 ? Math.max(0, q / v * 100) : 0);
+    const segs = [];
+    const d = DI[k];
+    if (d === undefined || d === null || !(ret > 0)) {
+      segs.push(`<i class="s0" style="height:${pct(ret).toFixed(2)}%"></i>`);
+    } else {
+      const dv = Math.min(Math.max(0, d), ret);
+      segs.push(`<i class="s1" style="height:${pct(dv).toFixed(2)}%"></i>`);
+      segs.push(`<i class="s2" style="height:${pct(ret - dv).toFixed(2)}%"></i>`);
+    }
+    if (x > 0) segs.push(`<i class="s3" style="height:${pct(x).toFixed(2)}%"></i>`);
+    return `<div class="ycol${isLast ? ' now' : ''}" style="--i:${i}">
+      <div class="bw"><div class="n">${n(v)}</div>
+      <div class="bar stk" style="height:${Math.max(10, v / mx * 152)}px">${segs.join('')}</div></div>
       <div class="l">${y}${isLast ? '（至 ' + (Y.ytd.as_of || '') + '）' : ''}</div></div>`;
   }).join('');
 
@@ -2127,6 +2235,11 @@ function yearly() {
     比 ${em(sv, fmt(sv))}，不可拿部分年度去比前几年全年数。
     <br>当前口径：<b>${FULL ? '全口径' : '仅零售'}</b>，切页顶 <code>全口径 / 仅零售</code> 即时重算；
     2023 年无日报文件，取公司台账（合计 = 零售 + 小额），与 2024 起同源不相斥。`
+    + `<br><b>柱色</b>：<span style="color:#7db8e8">■ 柴油</span>
+       · <span style="color:#e3c685">■ 汽油</span>`
+    + (FULL ? ` · <span style="color:#8ea3bb">■ 小额配送</span>` : '')
+    + `；2023 柱是斜纹 —— 台账只有一栏「合计」，源表不拆柴汽，不臆造比例。
+       汽油段 = 零售 − 柴油，三段之和严格等于柱顶总数（不让各段独立取整后拼出 0.1 吨误差）。`
     + (FULL ? ` 小额配送：2023 ${n((Y.xiao_annual || {})['2023'] || 0)} 吨 → 2024 ${
         n((Y.xiao_annual || {})['2024'] || 0)} → 2025 ${n((Y.xiao_annual || {})['2025'] || 0)} → 2026 ${
         n((Y.xiao_annual || {})['2026'] || 0)} 吨，其中 2024-06～2025-12 源表无该行，属填报缺失而非归零。`
@@ -2134,22 +2247,30 @@ function yearly() {
 
   // 月份对比表：2023 | 2024 | 2025 | 2026（同比仅 2026 vs 2025）
   const cols = [2023, 2024, 2025, 2026];
-  let h = '<thead><tr><th>会计月</th>'
-    + cols.map(y => `<th class="${y < 2025 ? 'his' : ''}">${y}</th>`).join('')
-    + '<th>同比</th></tr></thead><tbody>';
+  /* colgroup 钉死列宽：不加它 table-layout:fixed 会把 6 列均分，
+     「会计月」白占一格、数字列被压窄。 */
+  let h = '<colgroup><col class="c-m">'
+    + cols.map(() => '<col class="c-g">').join('')
+    + '<col class="c-y"></colgroup>';
+  h += '<thead><tr><th>会计月</th>'
+    + cols.map(y => `<th class="${y < 2025 ? 'his' : ''}${y === 2026 ? ' now' : ''}"
+        title="${y === 2026 ? '当年（统计至 ' + (Y.ytd.as_of || '') + '）' : y + ' 年会计月'}">${y}</th>`).join('')
+    + '<th title="2026 会计月 ÷ 2025 同会计月 − 1，分子分母同窗口">同比</th>'
+    + '</tr></thead><tbody>';
+  /* 「实时 N 天」行必须落在它自己的月份位置上。
+     原实现固定追加到表尾，于是 11 月出现两行（一行只带小额 20 吨、一行是实时 3 天），
+     读起来像 12 月之后的第 13 个月。改为在循环里就地替换该月行。 */
+  const liveRow = () => `<tr class="live"><td>${L.month} 月<em>实时 ${L.days} 天</em></td>`
+    + `<td class="his">—</td><td class="his">—</td><td>—</td>`
+    + `<td class="now">${n((L.t || 0) + (FULL ? (L.x || 0) : 0))}</td><td>—</td></tr>`;
   for (let mo = 1; mo <= 12; mo++) {
+    if (L.days && mo === L.month) { h += liveRow(); continue; }
     const v = cols.map(y => mval(y, mo));
     if (!v.some(x => x > 0)) continue;
     const g = (v[3] && v[2]) ? ((v[3] / v[2] - 1) * 100) : null;
     h += `<tr><td>${mo} 月</td>`
       + v.map((x, i) => `<td class="${cols[i] < 2025 ? 'his' : ''}${cols[i] === 2026 && x ? ' now' : ''}">${x ? n(x) : '—'}</td>`).join('')
       + `<td class="${cls(g)}">${fmt(g)}</td></tr>`;
-  }
-  if (L.days) {
-    const lv = (L.t || 0) + (FULL ? (L.x || 0) : 0);
-    h += `<tr><td>${L.month} 月<span class="tag">实时 ${L.days} 天</span></td>`
-      + `<td class="his">—</td><td class="his">—</td><td>—</td>`
-      + `<td class="now">${n(lv)}</td><td>—</td></tr>`;
   }
   h += '</tbody>';
   $('#ytbl').innerHTML = h;
@@ -2263,6 +2384,26 @@ function pairAnnual() {
       : '');
 }
 
+/* ===== 数据健康红条 =====
+   只做一件事：如果归档链路（archive_snapshot.py）报出 alert，就在页顶顶出一条红条。
+   ★ 不放进 render() 里 —— 它是「链路状态」，不随口径开关/视角切换变化，
+     塞进 render 既没必要，还容易被后续重绘覆盖掉。 */
+function renderHealth() {
+  const H = D.health;
+  const el = document.getElementById('hbar');
+  if (!el) return;
+  if (!H || !H.alert) { el.className = ''; el.innerHTML = ''; return; }
+  // ★ alert 文本里 archive_snapshot.py 已经拼了完整月份列表，
+  //   这里只补「alert 没提到的」那些，否则会读成「2026-10……（涉及 2026-10）」重复一遍。
+  const txt = String(H.alert || '');
+  const extra = (H.incomplete_months || []).filter(m => !txt.includes(m));
+  el.innerHTML = `<b>数据告警</b>${txt}`
+    + (extra.length ? ` <i>（另有 ${extra.join('、')}）</i>` : '')
+    + `<i> · 检查于 ${H.checked_at || '—'}，详见仓库 <code>_archive/HEALTH.json</code></i>`;
+  el.className = 'show';
+}
+
+renderHealth();
 render();
 </script>
 </body>
