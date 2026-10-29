@@ -1,7 +1,15 @@
 /* ==========================================================================
- * 成品油日报 → GitHub _incoming/data.json   v2.3
+ * 成品油日报 → GitHub _incoming/data.json   v2.4
  * 运行位置：金山文档「202611销售及库存日报（新).xlsx」内的 AirScript
  * 触发方式：定时任务（8:30 / 9:00 / 9:30 / 10:00 / 11:30 各挂一条，跑同一个 main）
+ *
+ * v2.4 变更（2026-10-29，修 401 Requires authentication）
+ *  1) ★ HTTP 调用改为优先走 HTTP.fetch(url,{method,headers,body,timeout})。
+ *     原先优先调 HTTP.get / HTTP.put 短接口，而它们【不吃 opts.headers】——
+ *     传进去不报错，Authorization 却悄悄丢了，GitHub 回 401 "Requires authentication"，
+ *     现象像令牌失效，其实令牌根本没发出去。HTTP.fetch 是 flow_push.js 已验证可用的形式。
+ *  2) ghGet 不再静默吞错：401/404/其它状态各打一条日志，并把远端现有体积与 sha 打出来。
+ *  3) 新增体积护栏：新内容小于远端 85% 时中止推送（防某天只读到 1 个日块把 3 天冲掉）。
  *
  * v2.3 变更（2026-10-29，修 GET 响应解析崩溃）
  *  1) ★ ghGet 原先写 JSON.parse(r.body || r.text || '{}')。HTTP.fetch 的返回对象
@@ -46,7 +54,7 @@
  *  4) 全零日块 = 未填报，跳过（不可补零，会把日均拉低）。
  * ========================================================================== */
 
-var VER = 'v2.3';
+var VER = 'v2.4';
 
 var CFG = {
   OWNER : 'lvritiann',
@@ -539,9 +547,17 @@ function http(method, url, opts) {
   if (typeof HTTP === 'undefined' || !HTTP) {
     throw new Error('HTTP 对象不存在（请先在编辑器「服务」里添加「网络API」）');
   }
+  /* ★ 必须优先走 HTTP.fetch（2026-10-29 实测）
+     HTTP.get / HTTP.put 这两个短接口【不吃 opts.headers】—— 传进去也不报错，
+     只是 Authorization 悄悄丢了，GitHub 回 401 "Requires authentication"，
+     看起来像令牌失效，其实令牌根本没发出去。
+     HTTP.fetch(url, {method, headers, body, timeout}) 是 flow_push.js 已验证可用的形式。 */
+  var o = opts || {};
+  o.method = method;
+  if (typeof HTTP.fetch === 'function') return HTTP.fetch(url, o);
   var name = method.toLowerCase();
-  if (typeof HTTP[name] === 'function') return HTTP[name](url, opts);
-  if (typeof HTTP.request === 'function') return HTTP.request(method, url, opts);
+  if (typeof HTTP[name] === 'function') return HTTP[name](url, o);
+  if (typeof HTTP.request === 'function') return HTTP.request(method, url, o);
   throw new Error('HTTP 不支持 ' + method + ' 方法');
 }
 
@@ -565,12 +581,22 @@ function ghGet(tok) {
                'User-Agent': 'kdocs-airscript' },
     timeout: 20000
   });
-  if (!r || r.status !== 200) return null;
+  var st = r ? Number(r.status) : 0;
+  if (st !== 200) {
+    /* 不再静默返回 null —— 401 是最常见的坑（令牌没发出去 / 令牌失效），
+       静默吞掉会让人以为「远端没文件」，然后去 PUT，再撞一次 401，白跑一轮。 */
+    if (st === 401) say('⚠️ GET 401 —— 令牌没生效（先查 HTTP.fetch 是否带上了 Authorization 头）');
+    else if (st === 404) say('（GET 404：远端还没有 ' + CFG.PATH + '，按新建处理）');
+    else if (st) say('（GET HTTP ' + r.status + '：' + respText(r).substring(0, 140) + '）');
+    else say('（GET 无响应）');
+    return null;
+  }
   var txt = respText(r);
   if (!txt) return null;
   var j = {};
   try { j = JSON.parse(txt) || {}; }
   catch (e) { say('（GET 返回不是 JSON，按无远端文件处理：' + txt.substring(0, 80) + '）'); return null; }
+  say('远端现有 data.json：' + (j.size || '?') + ' 字节，sha ' + String(j.sha || '').substring(0, 8));
   return { sha: j.sha, size: j.size, content: j.content };
 }
 
@@ -654,6 +680,23 @@ function main() {
         flush();
         return json;
       }
+    }
+
+    /* 体积护栏：新内容比远端小超过 15% 就中止推送。
+       典型事故是某天只读到 1 个日块（权限变了 / 表结构改了），
+       照样推上去会把已有 3 天的数据冲成 1 天，页面直接掉数。
+       这种情况下宁可这次不推，让远端保持上一版完整数据，等人工查。 */
+    if (cur && cur.size > 1000) {
+      var ratio = json.length / cur.size;
+      if (ratio < 0.85) {
+        say('⚠️ 中止推送：新内容 ' + json.length + ' 字节，只有远端 ' + cur.size
+          + ' 字节的 ' + (ratio * 100).toFixed(1) + '%（阈值 85%）');
+        say('   → 大概率本次读表不全。远端保持上一版不动，请检查日块/权限后重跑。');
+        flush();
+        return json;
+      }
+      say('体积对比：新 ' + json.length + ' 字节 / 远端 ' + cur.size
+        + ' 字节（' + (ratio * 100).toFixed(1) + '%）');
     }
 
     var res = ghPut(tok, json, cur ? cur.sha : null);
