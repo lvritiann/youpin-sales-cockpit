@@ -1,8 +1,14 @@
 /* ==========================================================================
- * 成品油日报 → GitHub _incoming/data.json   v2.1
+ * 成品油日报 → GitHub _incoming/data.json   v2.2
  * 运行位置：金山文档「202611销售及库存日报（新).xlsx」内的 AirScript
  * 触发方式：定时任务（8:30 / 9:00 / 9:30 / 10:00 / 11:30 各挂一条，跑同一个 main）
  *
+ * v2.2 变更（2026-10-29，「驾驶舱配置」表不存在导致推送中断）
+ *  1) ★ 令牌改为两处来源，取到其一即可：①「驾驶舱配置」B1  ② 代码顶部 CFG.TOKEN。
+ *     实测该簿 63 张子表里并没有「驾驶舱配置」，v2.1 会直接抛错停在推送前一步。
+ *     现在没有这张表也照常推送，只是少了「C 列日志」和「A1 会计月回写」两项便利。
+ *  2) 日志会打印「令牌来源：…」，一眼看出用的是哪一处，不用猜。
+ *  3) 两处都空才报错，错误信息直接给出两种补法。
  * v2.1 变更（2026-10-29 开启自动推送）
  *  1) ★ CFG.PUSH 出厂值改为 true —— 从本版起，定时任务跑完会真的推送到 GitHub。
  *     想临时只看不推，把 PUSH 改回 false 即可（其余逻辑不变）。
@@ -30,7 +36,7 @@
  *  4) 全零日块 = 未填报，跳过（不可补零，会把日均拉低）。
  * ========================================================================== */
 
-var VER = 'v2.1';
+var VER = 'v2.2';
 
 var CFG = {
   OWNER : 'lvritiann',
@@ -39,6 +45,10 @@ var CFG = {
   PATH  : '_incoming/data.json',
 
   SHEET_CFG : '驾驶舱配置',   // 可选表：A1=会计月(留空自动推导), B1=GitHub令牌, C1..=运行日志
+  TOKEN     : '',            // ★ 令牌兜底位（v2.2 新增）
+                             //   取值优先级：①「驾驶舱配置」B1  →  ② 这里的 TOKEN
+                             //   没有这张表、或 B1 空着，就用这行；两边都空才报错。
+                             //   不想在代码里放令牌，就建一张「驾驶舱配置」表把令牌填 B1。
   PUSH      : true,          // ★ v2.1 起默认 true：跑完会真的推送到 GitHub
                              //   想只看不推（例如核对口径）临时改回 false，其余逻辑不变
 
@@ -580,14 +590,32 @@ function main() {
       return json;
     }
 
+    /* 令牌来源：①「驾驶舱配置」B1  ② CFG.TOKEN（代码里）
+       二者取其一即可。没有这张表不算错误 —— 只是少了「C 列运行日志」和「A1 会计月回写」
+       这两项便利，控制台日志照常完整。 */
     var cfgSh = sheet(CFG.SHEET_CFG);
-    if (!cfgSh) throw new Error('缺少工作表「' + CFG.SHEET_CFG + '」—— PUSH=true 时需要在它的 B1 填 GitHub 令牌');
-    var tok = cleanTok(getCell(cfgSh, 'B1'));
-    if (!tok) throw new Error('「' + CFG.SHEET_CFG + '」B1 缺少 GitHub 令牌（PUSH=true 时必须填）');
+    var tok = cfgSh ? cleanTok(getCell(cfgSh, 'B1')) : '';
+    var tokFrom = '「' + CFG.SHEET_CFG + '」B1';
+    if (!cfgSh) {
+      say('（本簿没有「' + CFG.SHEET_CFG + '」表，跳过 B1，改用代码里的 CFG.TOKEN）');
+      tokFrom = '代码 CFG.TOKEN';
+      tok = cleanTok(CFG.TOKEN);
+    } else if (!tok) {
+      say('（「' + CFG.SHEET_CFG + '」B1 是空的，改用代码里的 CFG.TOKEN）');
+      tokFrom = '代码 CFG.TOKEN';
+      tok = cleanTok(CFG.TOKEN);
+    }
+    if (!tok) {
+      throw new Error('找不到 GitHub 令牌 —— 二选一：'
+        + '① 新建「' + CFG.SHEET_CFG + '」表，把令牌填进 B1；'
+        + '② 把令牌填进代码顶部的 CFG.TOKEN');
+    }
     if (!/^(gh[pousr]_|github_pat_)/.test(tok)) {
       // 不打印令牌本身，只提示前 4 位，避免日志外泄
-      say('⚠️ B1 的值不像 GitHub 令牌（应以 ghp_ / github_pat_ 开头，实际前 4 位「'
+      say('⚠️ ' + tokFrom + ' 的值不像 GitHub 令牌（应以 ghp_ / github_pat_ 开头，实际前 4 位「'
         + tok.substring(0, 4) + '」），仍继续尝试');
+    } else {
+      say('令牌来源：' + tokFrom);
     }
 
     var cur = ghGet(tok);
