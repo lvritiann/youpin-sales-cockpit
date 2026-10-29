@@ -34,7 +34,11 @@ var CFG = {
   CUST : { name: '大客户明细', rows: 1547, cols: 162 }
 };
 
-var C_SALE = { t10: 2, t0: 3, t92: 4, t95: 5, t: 6, l: 11, amt: 16, wan: 21 };
+/* 销售日报列（0 基）：吨 2-6 / 升 7-11 / 销售额元 12-16 / 万元 17-21
+   ★ 常驻字段只留汇总值；_ 开头的分油品中间量折完即删，不进 data.json */
+var C_SALE = { t10: 2, t0: 3, t92: 4, t95: 5, t: 6, l: 11, amt: 16, wan: 21,
+               _dL1: 7, _dL0: 8, _gL92: 9, _gL95: 10,
+               _dA1: 12, _dA0: 13, _gA92: 14, _gA95: 15 };
 var C_AGG  = { t: 6, l: 11, amt: 16, wan: 21 };
 var CHANNELS = ['现金', 'POS', '微信', '支付宝', '工贸卡', '壳牌卡', '大客户',
                 '通四海', '定期结算', '回罐', '内结'];
@@ -129,18 +133,25 @@ function readRange(sh, ref) {
   throw new Error('无法读取区域 ' + ref + '（Range/Value2/Value/getValues 全部失败）');
 }
 
-/* Value2 可能返回 0 基或 1 基二维数组，统一压成 0 基并补齐列宽 */
-function grid(v, cols) {
+/* Value2 可能返回 0 基或 1 基、也可能行是被裁过的锯齿数组。
+   不再靠 `undefined` 猜 —— 直接拿「请求的行列数」反推基序，最稳。 */
+function grid(v, nrows, ncols) {
   if (!v || !v.length) return [];
-  var one = (v[0] === undefined);
+  var L = v.length;
+  var oneRow = (L === nrows + 1) ? true : (L === nrows ? false : (v[0] === undefined));
+
+  var sample = null;
+  for (var i = oneRow ? 1 : 0; i < L; i++) {
+    if (v[i] && v[i].length) { sample = v[i]; break; }
+  }
+  var cl = sample ? sample.length : ncols;
+  var oneCol = (cl === ncols + 1) ? true : (cl === ncols ? false : (sample && sample[0] === undefined));
+
   var out = [];
-  for (var i = one ? 1 : 0; i < v.length; i++) {
-    var src = v[i];
-    if (!src) { out.push(new Array(cols)); continue; }
-    var inner = (src[0] === undefined && src.length > 1) ? 1 : 0;
+  for (var r = oneRow ? 1 : 0; r < L; r++) {
+    var src = v[r] || [];
     var row = [];
-    for (var j = inner; j < src.length; j++) row.push(src[j]);
-    while (row.length < cols) row.push('');
+    for (var c = 0; c < ncols; c++) row.push(src[oneCol ? c + 1 : c]);
     out.push(row);
   }
   return out;
@@ -157,25 +168,39 @@ function readSheet(name, rows, cols) {
   if (!sh) throw new Error('找不到子表：' + name + '（现有：' + sheetNames().join(' / ') + '）');
   var ref = 'A1:' + colName(cols) + rows;
   var raw = readRange(sh, ref);
-  return { rows: grid(raw, cols), sh: sh };
+  return { rows: grid(raw, rows, cols), sh: sh };
 }
 
 /* ---------------------------------------------------------------- 日块切分 */
 
-function blocksOf(rows, key) {
-  var starts = [];
-  for (var i = 0; i < rows.length; i++) {
-    var r = rows[i] || [];
-    for (var j = 0; j < r.length; j++) {
-      if (s(r[j]).indexOf(key) >= 0) { starts.push(i); break; }
+/* ★ 关键：块首只认第 3 列（C 列，下标 2）。
+   日报每张子表最右侧还挂着一张「当日销量（吨）」小表（Y/Z 列），
+   若按「任意列含关键词」判块首，那块小表会把一个日块从中间切成两段，
+   第二段丢掉 A 列日号，只能靠 SEQ 兜底 → 日期整体错位、站点数缺一半。 */
+function blocksOf(rows, key, col) {
+  var c = (col === undefined || col === null) ? 2 : col;
+  var starts = startsAt(rows, key, c);
+  if (!starts.length) {
+    /* 某些子表排版不同（如渠道表），C 列认不到再退化为全列扫描 */
+    for (var j = 0; j < 26 && !starts.length; j++) {
+      if (j !== c) starts = startsAt(rows, key, j);
     }
   }
   var out = [];
   for (var k = 0; k < starts.length; k++) {
     out.push({
       label: s((rows[starts[k]] || [])[0]),
+      row  : starts[k],
       rows : rows.slice(starts[k], k + 1 < starts.length ? starts[k + 1] : rows.length)
     });
+  }
+  return out;
+}
+
+function startsAt(rows, key, col) {
+  var out = [];
+  for (var i = 0; i < rows.length; i++) {
+    if (s((rows[i] || [])[col]).indexOf(key) >= 0) out.push(i);
   }
   return out;
 }
@@ -184,10 +209,13 @@ function dayBlocks(rows, key) {
   var bl = blocksOf(rows, key), res = {}, order = [];
   var idx = 0;
   for (var k = 0; k < bl.length; k++) {
-    if (bl[k].label.indexOf('-') >= 0) continue;      // 会计月累计块，丢弃
+    if (bl[k].label.indexOf('-') >= 0) continue;      // 会计月累计块（'26-25'），丢弃
     var lab = bl[k].label, day = null;
     if (/^\d{1,2}$/.test(lab) && +lab >= 1 && +lab <= 31) day = String(+lab);
-    if (!day) day = SEQ[idx] || null;
+    if (!day) {
+      day = SEQ[idx] || null;
+      say('[warn] 第 ' + (k + 1) + ' 个日块标签「' + lab + '」非日号，按块序取 ' + day);
+    }
     idx++;
     if (!day) continue;
     res[day] = bl[k].rows;
@@ -196,14 +224,29 @@ function dayBlocks(rows, key) {
   return { map: res, order: order };
 }
 
+/* 子表头行里那些不是站名的东西：-10 / 0 / 92 / 95 / 柴油 / 汽油 / 26-25 / 小计 … */
+var NOTNAME = ['柴油', '汽油', '小计', '合计', '零售小计', '小额配送', '总计', '累计',
+               '-10', '- 10', '0', '92', '95', '26-25'];
+
+function isName(x) {
+  var t = s(x);
+  if (!t) return false;
+  if (NOTNAME.indexOf(t) >= 0) return false;
+  if (t.indexOf('当日') >= 0 || t.indexOf('销量') >= 0) return false;
+  if (/^[-－—:]+$/.test(t)) return false;                       // '---' 之类的分隔线
+  if (/^[-－—+]?\s*\d+(\.\d+)?$/.test(t)) return false;          // 纯数字 / 负数
+  if (/^\d{1,2}\s*[-－—~～]\s*\d{1,2}$/.test(t)) return false;   // 26-25
+  return true;
+}
+
 function stations(blk, cols) {
   var out = {}, road = null;
   for (var i = 0; i < blk.length; i++) {
     var r = blk[i];
     if (!r || r.length < 2) continue;
     var c0 = s(r[0]), c1 = s(r[1]);
-    if (c0 && AGG.indexOf(c0) < 0 && !/^\d/.test(c0)) road = c0;
-    if (!c1 || AGG.indexOf(c1) >= 0 || c1.indexOf('当日') >= 0 || /^\d/.test(c1)) continue;
+    if (c0 && AGG.indexOf(c0) < 0 && !/^[\d\-－—]/.test(c0)) road = c0;
+    if (!isName(c1)) continue;
     var o = { road: road || c0 };
     for (var k in cols) { if (cols.hasOwnProperty(k)) o[k] = num(r[cols[k]]); }
     out[c1] = o;
@@ -283,7 +326,10 @@ function build() {
     var xiao = {
       t:   xe ? r2(num(xe[6]))  : 0,
       amt: xe ? r2(num(xe[16])) : 0,
-      wan: xe ? r3(num(xe[21])) : 0
+      wan: xe ? r3(num(xe[21])) : 0,
+      /* 小额行同样有 -10/0/92/95 分列；全 0 视为「未拆柴汽」 */
+      diesel: xe ? r3(num(xe[2]) + num(xe[3])) : 0,
+      gas:    xe ? r3(num(xe[4]) + num(xe[5])) : 0
     };
 
     var names = Object.keys(st), any = false;
@@ -292,6 +338,13 @@ function build() {
       var v = st[names[k]];
       v.diesel = r3(v.t10 + v.t0);
       v.gas    = r3(v.t92 + v.t95);
+      /* 柴汽单价：用「升」与「元」两列的 小计 折出，中间量不进 JSON */
+      v.dL = r2(v._dL1 + v._dL0);
+      v.gL = r2(v._gL92 + v._gL95);
+      v.dA = r2(v._dA1 + v._dA0);
+      v.gA = r2(v._gA92 + v._gA95);
+      delete v._dL1; delete v._dL0; delete v._gL92; delete v._gL95;
+      delete v._dA1; delete v._dA0; delete v._gA92; delete v._gA95;
       if (v.t) any = true;
       sumT += v.t; sumD += v.diesel; sumG += v.gas;
       sumL += v.l; sumA += v.amt;   sumW += v.wan;
@@ -305,6 +358,17 @@ function build() {
       n: names.length, xiao: xiao
     };
     days.push(day);
+    say('  ' + day + ' 日：' + names.length + ' 站 / 站级 ' + r2(sumT)
+        + ' 吨 + 小额 ' + r2(xiao.t) + ' 吨（块 ' + blk.length + ' 行）');
+  }
+  if (days.length) {
+    var cnt = {}, mm = 0;
+    for (var q = 0; q < days.length; q++) {
+      var cq = sale[days[q]].n; cnt[cq] = (cnt[cq] || 0) + 1; if (cq > mm) mm = cq;
+    }
+    if (Object.keys(cnt).length > 1) {
+      say('[warn] 各日站点数不一致：' + JSON.stringify(cnt) + '，请核对是否有日块被切断');
+    }
   }
 
   /* --- 渠道表 --- */
@@ -345,8 +409,8 @@ function build() {
         var r = ublk[ur];
         if (!r || r.length < 2) continue;
         var a0 = s(r[0]), a1 = s(r[1]);
-        if (a0 && AGG.indexOf(a0) < 0 && !/^\d/.test(a0)) road2 = a0;
-        if (!a1 || AGG.indexOf(a1) >= 0 || /^\d/.test(a1)) continue;
+        if (a0 && AGG.indexOf(a0) < 0 && !/^[\d\-－—]/.test(a0)) road2 = a0;
+        if (!isName(a1)) continue;
         var rec = { road: road2 || a0, l: num(r[6]), amt: num(r[11]), c: {} };
         for (var ck = 0; ck < CLIENT_COLS.length; ck++) {
           var base = CLIENT_COLS[ck][0], cname = CLIENT_COLS[ck][1];
