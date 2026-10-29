@@ -849,6 +849,7 @@ payload['prev_day'] = prev_day
 tpl = open(os.path.join(BASE, 'cockpit2_template.html'), encoding='utf-8').read()
 html = tpl.replace('__PAYLOAD__', json.dumps(payload, ensure_ascii=False))
 out = os.path.join(ROOT, 'cockpit', 'index.html')
+os.makedirs(os.path.dirname(out), exist_ok=True)   # 云端首次构建时该目录不存在
 open(out, 'w', encoding='utf-8').write(html)
 print('written', out, len(html))
 for k in ['2026-11', '2026-10', '2026-09']:
