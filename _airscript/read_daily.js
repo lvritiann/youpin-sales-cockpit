@@ -1,7 +1,14 @@
 /* ==========================================================================
- * 成品油日报 → GitHub _incoming/data.json   v2.7
+ * 成品油日报 → GitHub _incoming/data.json   v2.8
  * 运行位置：金山文档「202611销售及库存日报（新).xlsx」内的 AirScript
  * 触发方式：定时任务（8:30 / 9:00 / 9:30 / 10:00 / 11:30 各挂一条，跑同一个 main）
+ *
+ * v2.8 变更（2026-10-29，新增「历史归档」中转表落表）
+ *  1) ★ 每次解析成功后，把「当前会计月汇总 + 站级明细」写入本簿的「历史归档」表。
+ *     该表与「销售日报」物理隔离 —— 每月 26 号清表不会再连带抹掉历史。
+ *     版式：A~L 月汇总（一月一行，幂等覆盖），N~V 站级明细（按「会计月+站名」定位）。
+ *  2) 与 PUSH 解耦：不推 GitHub 也照样落表；落表失败不阻断推送。
+ *  3) 没有该表时只提示一句，不报错、不影响原有流程。
  *
  * v2.7 变更（2026-10-29，修「每月 26 号必然误拦」）
  *  ★ 体积护栏在新会计月起步时会连拦 8 天：26 号清表后只剩 1 天数据，
@@ -75,7 +82,7 @@
  *  4) 全零日块 = 未填报，跳过（不可补零，会把日均拉低）。
  * ========================================================================== */
 
-var VER = 'v2.7';
+var VER = 'v2.8';
 
 var CFG = {
   OWNER : 'lvritiann',
@@ -84,6 +91,8 @@ var CFG = {
   PATH  : '_incoming/data.json',
 
   SHEET_CFG : '驾驶舱配置',   // 可选表：A1=会计月(留空自动推导), B1=GitHub令牌, C1..=运行日志
+  ARCH_SHEET: '历史归档',     // ★ 中转表：逐月累积月汇总+站级明细，清空日报表不影响它
+                             //   手工新建一张同名空工作表即可启用；没有则自动跳过
   TOKEN     : '',            // ★ 令牌兜底位（v2.2 新增）
                              //   取值优先级：①「驾驶舱配置」B1  →  ② 这里的 TOKEN
                              //   没有这张表、或 B1 空着，就用这行；两边都空才报错。
@@ -662,6 +671,119 @@ function ghPut(tok, text, sha) {
   });
 }
 
+
+/* ---------------------------------------------------------------- 归档落表 */
+/* 把本次解析结果写入「历史归档」中转表 —— 解决「每月 26 号清空日报表导致数据断档」。
+   背景：日报表每会计月清空重写，data.json 只保留当前会计月；
+        一旦月底没来得及另存 xlsx、也没重建 _archive，那个月的数据就断了。
+   做法：每次解析成功就把「会计月汇总 + 站级明细」落到一张**独立的表**里，
+        与日报表物理隔离 —— 清表不影响它，逐月累积，可追溯。
+   幂等：同一会计月重复跑只覆盖该月那几行，不会产生重复记录。
+   版式：A~L 月汇总（一行一个月），N~V 站级明细（从第 2 行起逐站追加）。 */
+
+var ARCH_HEAD = ['会计月', '区间', '零售吨', '柴油吨', '汽油吨', '小额吨',
+                 '全口径吨', '含税金额元', '万元', '站数', '天数', '写入时间'];
+var ARCH_ST_HEAD = ['会计月', '站名', '路段', '零售吨', '柴油吨', '汽油吨',
+                    '升', '含税金额元', '万元'];
+var ARCH_ST_COL = 14;                     // 站级明细起始列 = N
+
+function colName(n) {
+  var out = '';
+  while (n > 0) {
+    var m = (n - 1) % 26;
+    out = String.fromCharCode(65 + m) + out;
+    n = (n - m - 1) / 26;
+  }
+  return out;
+}
+
+function archiveToSheet(D) {
+  var sh = sheet(CFG.ARCH_SHEET);
+  if (!sh) {
+    say('（本簿没有「' + CFG.ARCH_SHEET + '」表，跳过归档落表 —— 新建一张同名空表即可启用）');
+    return;
+  }
+  /* ★ D 是 build() 的返回值，meta 里**没有** month_order（那是 build 端拼 payload 时才加的）。
+     会计月标签从 accounting_month 推：'2026-10-26 ~ 2026-11-25' → 取右半段前 7 位 '2026-11'，
+     与页面 months 的键完全一致，便于日后对账。 */
+  var range = (D.meta && D.meta.accounting_month) || '';
+  var _rParts = String(range).split('~');
+  var acm = _rParts.length > 1 ? s(_rParts[1]).substring(0, 7) : '';
+  var days = (D.meta && D.meta.days_with_data) || [];
+  if (!acm || !days.length) { say('（归档跳过：会计月或数据天数为空）'); return; }
+
+  /* ---- 1) 汇总 ---- */
+  var ret = 0, die = 0, gas = 0, xt = 0, amt = 0, wan = 0, stMap = {}, stOrder = [];
+  for (var i = 0; i < days.length; i++) {
+    var rs = D.sale[days[i]];
+    if (!rs) continue;
+    var x = rs.xiao || {};
+    ret += rs.t || 0; die += rs.diesel || 0; gas += rs.gas || 0;
+    xt += x.t || 0; amt += rs.amt || 0; wan += rs.wan || 0;
+    var ss = rs.stations || {};
+    for (var nm in ss) {
+      if (!ss.hasOwnProperty(nm)) continue;
+      var v = ss[nm];
+      if (!stMap[nm]) { stMap[nm] = { road: v.road || '', t: 0, d: 0, g: 0, l: 0, a: 0, w: 0 }; stOrder.push(nm); }
+      var o = stMap[nm];
+      o.t += v.t || 0; o.d += v.diesel || 0; o.g += v.gas || 0;
+      o.l += v.l || 0; o.a += v.amt || 0; o.w += v.wan || 0;
+    }
+  }
+  stOrder.sort(function (a, b) { return stMap[b].t - stMap[a].t; });
+
+  /* ---- 2) 月汇总 upsert：A 列找会计月，命中覆盖；否则写第一个空行 ---- */
+  if (s(getCell(sh, 'A1')) !== ARCH_HEAD[0]) {
+    for (var h = 0; h < ARCH_HEAD.length; h++) setCell(sh, colName(h + 1) + '1', ARCH_HEAD[h]);
+  }
+  var target = 0, firstEmpty = 0;
+  for (var r = 2; r <= 200; r++) {
+    var cv = s(getCell(sh, 'A' + r));
+    if (cv === acm) { target = r; break; }
+    if (!cv && !firstEmpty) firstEmpty = r;
+  }
+  if (!target) target = firstEmpty || (200 + 1);
+
+  var line = [acm, range, r2(ret), r2(die), r2(gas), r2(xt), r2(ret + xt),
+              r2(amt), r3(wan), stOrder.length, days.length,
+              fmtDate(today0()) + ' ' + VER];
+  for (var c = 0; c < line.length; c++) setCell(sh, colName(c + 1) + target, line[c]);
+
+  /* ---- 3) 站级明细 upsert：一次性读 N~V 区，内存定位 ---- */
+  if (s(getCell(sh, colName(ARCH_ST_COL) + '1')) !== ARCH_ST_HEAD[0]) {
+    for (var k = 0; k < ARCH_ST_HEAD.length; k++) {
+      setCell(sh, colName(ARCH_ST_COL + k) + '1', ARCH_ST_HEAD[k]);
+    }
+  }
+  var ROWS = 600;
+  var grid = null;
+  try { grid = sh.Range('N1:V' + ROWS).Value2; } catch (e) { grid = null; }
+  var used = {};                                   // "会计月|站名" → 行号
+  if (grid && grid.length) {
+    for (var gi = 1; gi < grid.length; gi++) {
+      var gk = s(grid[gi][0]) + '|' + s(grid[gi][1]);
+      if (s(grid[gi][0]) && s(grid[gi][1])) used[gk] = gi + 1;
+    }
+  }
+  var lastRow = 1;
+  for (var t in used) { if (used[t] > lastRow) lastRow = used[t]; }
+
+  var wrote = 0;
+  for (var q = 0; q < stOrder.length; q++) {
+    var sn = stOrder[q], sv = stMap[sn];
+    var key = acm + '|' + sn;
+    var row = used[key] || (++lastRow);
+    var cells = [acm, sn, sv.road, r2(sv.t), r2(sv.d), r2(sv.g), r2(sv.l), r2(sv.a), r3(sv.w)];
+    for (var m = 0; m < cells.length; m++) {
+      setCell(sh, colName(ARCH_ST_COL + m) + row, cells[m]);
+    }
+    wrote++;
+  }
+  say('✅ 已落表「' + CFG.ARCH_SHEET + '」：会计月 ' + acm
+      + ' 汇总行 ' + target + '，站级 ' + wrote + ' 行'
+      + '（零售 ' + r2(ret) + ' 吨 + 小额 ' + r2(xt) + ' 吨 = ' + r2(ret + xt) + ' 吨）');
+}
+
 /* ---------------------------------------------------------------- 主流程 */
 
 function main() {
@@ -684,6 +806,9 @@ function main() {
       say('最新 ' + last + ' 日：站级 ' + r2(tot) + ' 吨 + 小额 ' + r2(xs) + ' 吨 = ' + r2(tot + xs) + ' 吨（' + nm.length + ' 站）');
     }
     say('JSON ' + utf8Len(json) + ' 字节（' + json.length + ' 字符）');
+
+    /* 归档落表：与 PUSH 无关，即使不推 GitHub 也先把数据存进中转表 */
+    try { archiveToSheet(D); } catch (eA) { say('归档落表失败（不影响推送）：' + (eA && eA.message ? eA.message : eA)); }
 
     if (!CFG.PUSH) {
       say('PUSH=false，仅解析未推送。核对上面数字无误后把 CFG.PUSH 改成 true');
