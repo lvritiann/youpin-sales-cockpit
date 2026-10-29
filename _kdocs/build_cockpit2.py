@@ -447,13 +447,23 @@ yearly['real_note'] = ('2023 为公司台账（自然月，无日报文件）；
 # 与 real_annual 严格同源同窗口：2024–2025 走日块逐月累加（rb_sum），
 # 2026 走「已完月 + 11 月实时」（disp_d / disp_g 就是它）。
 # ★ 必须满足 diesel + gas == real_annual，否则堆叠柱总高会与柱顶数值不符。
-# 2023 无日报文件、台账不拆柴汽 —— 前端画斜纹「未拆分」段，不臆造比例。
+# ★ 2023 同样可拆：公司台账「零售」行本身带柴油/汽油两栏（旧注释误以为只有合计），
+#   实测 diesel + gas 与 retail 完全相等（30,211.5 + 59,046.2 = 89,257.7），
+#   故 2023 也走同一套三色，不再整根画斜纹。斜纹只留给「真的没有拆分」的数据。
+_L23 = (YE['annual'].get('零售', {}) or {}).get('2023', {}) or {}
+_D23, _G23 = float(_L23.get('diesel') or 0), float(_L23.get('gas') or 0)
+_T23 = float(_L23.get('total') or 0)
+if _T23 and abs((_D23 + _G23) - _T23) > 0.5:
+    print('[warn] 2023 台账柴汽之和 %.2f ≠ 零售 %.2f，2023 柱改用斜纹' % (_D23 + _G23, _T23))
+    _D23 = _G23 = 0.0
 yearly['diesel_annual'] = {
+    '2023': round(_D23, 2),
     '2024': rb_sum(2024, key='m_diesel'),
     '2025': rb_sum(2025, key='m_diesel'),
     '2026': round(disp_d, 2),
 }
 yearly['gas_annual'] = {
+    '2023': round(_G23, 2),
     '2024': rb_sum(2024, key='m_gas'),
     '2025': rb_sum(2025, key='m_gas'),
     '2026': round(disp_g, 2),
@@ -824,6 +834,80 @@ _co_chan = {c['name']: c['share'] for c in VIEW_CO['chan']}
 VIEW_CO['chan_base'] = _co_chan
 for _pn, _v in VIEW_PAIR.items():
     _v['chan_base'] = _co_chan
+
+# ---- 分对 × 逐年逐会计月序列（「历年销量对比」在单站视角下的数据源）----
+# 该卡原先无论切到哪个站，都只渲染公司级序列（annualOf / mval 全是公司数），
+# 于是「单站视角」下图表与月份表纹丝不动 —— 这是本次要修的第 3 个问题。
+# 这里在 build 阶段就把「每对 × 每年 × 每会计月」算好，前端只取不推算：
+#   2023      = 公司台账分站行（自带柴汽两栏，与年度柱同一来源）
+#   2024/2025 = SER 站级月表逐月累加（与全公司口径同为日块来源）
+#   2026      = SER 1–10 月 + 11 月实时片段（直接复用 views.pairs 的当月数，同源不重算）
+# 结构 pair_series[对][年][月] = [合计, 柴油, 汽油]，1 位小数；缺月不出键 → 前端画「—」。
+PAIR_SER = {}
+
+
+def _ps_cell(pn, y, mo):
+    return PAIR_SER.setdefault(pn, {}).setdefault(str(y), {}).setdefault(
+        str(mo), [0.0, 0.0, 0.0])
+
+
+for _ym, _mm in SER['months'].items():
+    _yy, _mo = _ym[:4], str(int(_ym[4:]))
+    for _sn, _rec in _mm.items():
+        _pn = _sn if _sn == XIAO else _st2pair.get(_sn)
+        if not _pn or _pn not in PAIR_ANN:
+            continue
+        _t = float(_rec.get('t') or 0)
+        if _t <= 0:
+            continue
+        _c = _ps_cell(_pn, _yy, _mo)
+        _c[0] += _t
+        _c[1] += float(_rec.get('d') or 0)
+        _c[2] += float(_rec.get('g') or 0)
+
+# 2023：台账「分站行」，源表自带 diesel / gas（合计行同样带，见上文校验）
+for _m_ in range(1, 13):
+    for _pn_, _rec_ in (YE['months'].get(str(_m_)) or {}).items():
+        _key = XIAO if _pn_ == '小额' else _pn_
+        if _key not in PAIR_ANN:
+            continue
+        _v = _rec_.get('2023') or {}
+        _t = float(_v.get('total') or 0)
+        if _t <= 0:
+            continue
+        _c = _ps_cell(_key, 2023, _m_)
+        _c[0] += _t
+        _c[1] += float(_v.get('diesel') or 0)
+        _c[2] += float(_v.get('gas') or 0)
+
+# 当年 11 月实时片段：views.pairs 里已是「该对 1..11 月」的同一套数，直接搬过来
+for _pn_, _v_ in VIEW_PAIR.items():
+    _mr = (_v_.get('months') or {}).get(str(LIVE_NO)) or {}
+    _t = float(_mr.get('t') or 0)
+    if _t <= 0:
+        continue
+    PAIR_SER.setdefault(_pn_, {}).setdefault(str(CUR_Y), {})[str(LIVE_NO)] = [
+        round(_t, 1), round(float(_mr.get('diesel') or 0), 1),
+        round(float(_mr.get('gas') or 0), 1)]
+
+yearly['pair_series'] = {
+    _pn_: {_y: {_mo: [round(_c[0], 1), round(_c[1], 1), round(_c[2], 1)]
+                for _mo, _c in sorted(_mv.items(), key=lambda kv: int(kv[0]))}
+           for _y, _mv in sorted(_yv.items())}
+    for _pn_, _yv in PAIR_SER.items()}
+yearly['pair_series_live'] = {'month': LIVE_NO, 'days': len(live_days),
+                              'year': CUR_Y}
+# 逐对校验：历年柱的三段之和必须等于年度合计（差额只允许来自 1 位小数取整）
+_chk = []
+for _pn_, _yv in yearly['pair_series'].items():
+    for _y, _mv in _yv.items():
+        _s = round(sum(v[0] for v in _mv.values()), 1)
+        _dg = round(sum(v[1] + v[2] for v in _mv.values()), 1)
+        if _s and abs(_dg - _s) > max(1.0, _s * 0.002):
+            _chk.append('%s %s 柴汽 %.1f ≠ 合计 %.1f' % (_pn_, _y, _dg, _s))
+print('分对逐年序列：%d 对 | 柴汽自洽异常 %d 条%s'
+      % (len(yearly['pair_series']), len(_chk),
+         ('：' + '；'.join(_chk[:4])) if _chk else ''))
 
 yearly['views'] = {
     'company': VIEW_CO,
