@@ -1,7 +1,15 @@
 /* ==========================================================================
- * 成品油日报 → GitHub _incoming/data.json   v2
+ * 成品油日报 → GitHub _incoming/data.json   v2.1
  * 运行位置：金山文档「202611销售及库存日报（新).xlsx」内的 AirScript
  * 触发方式：定时任务（8:30 / 9:00 / 9:30 / 10:00 / 11:30 各挂一条，跑同一个 main）
+ *
+ * v2.1 变更（2026-10-29 开启自动推送）
+ *  1) ★ CFG.PUSH 出厂值改为 true —— 从本版起，定时任务跑完会真的推送到 GitHub。
+ *     想临时只看不推，把 PUSH 改回 false 即可（其余逻辑不变）。
+ *  2) 令牌读取加清洗：从单元格粘贴过来的值常带引号、空格、换行，
+ *     或被人连 "Bearer " 一起粘进来 —— 任一情况都会让 Authorization 头非法。
+ *     新函数 cleanTok() 统一剪掉，只留令牌本体。
+ *  3) 令牌 B1 缺失 / 清洗后为空 → 明确报错，不静默跳过。
  *
  * v2 变更（针对首跑报错「驾驶舱配置!A1 需写会计月」）
  *  1) 会计月改为「A1 有就认 A1，没有就按今天自动推导」——不再强制手工维护；
@@ -9,6 +17,10 @@
  *  2) 日志同时打到 console 与「驾驶舱配置」C 列；没有该表也能在控制台看全部结果。
  *  3) 取表 / 取格 / 取区域 全部加多重兼容（Range·Value2·Value·getValues）。
  *  4) 启动先打印所有子表名 —— 取表失败时一眼看出是名字不对还是取法不对。
+ *
+ * ★ 运行注意（2026-10-29 实测确认）
+ *   AirScript 2.0 的「运行」按钮只执行顶层代码，不会主动调用 main()。
+ *   本文件末尾第 581 行的 main(); 不能删 —— 删了就是一跑 100ms、一行日志都没有。
  *
  * 设计原则
  *  1) 只读源表，绝不写回任何业务单元格；唯一写入是「驾驶舱配置」的状态格。
@@ -18,7 +30,7 @@
  *  4) 全零日块 = 未填报，跳过（不可补零，会把日均拉低）。
  * ========================================================================== */
 
-var VER = 'v2';
+var VER = 'v2.1';
 
 var CFG = {
   OWNER : 'lvritiann',
@@ -27,7 +39,8 @@ var CFG = {
   PATH  : '_incoming/data.json',
 
   SHEET_CFG : '驾驶舱配置',   // 可选表：A1=会计月(留空自动推导), B1=GitHub令牌, C1..=运行日志
-  PUSH      : false,         // ★ 出厂 false：只解析。核对无误后改 true 才会真推
+  PUSH      : true,          // ★ v2.1 起默认 true：跑完会真的推送到 GitHub
+                             //   想只看不推（例如核对口径）临时改回 false，其余逻辑不变
 
   SALE : { name: '销售日报', rows: 1601, cols: 28 },
   CH   : { rows: 1537, cols: 22 },
@@ -68,6 +81,22 @@ function flush() {
 /* ---------------------------------------------------------------- 基础工具 */
 
 function s(x) { return x === null || x === undefined ? '' : String(x).trim(); }
+
+/* GitHub 令牌清洗。
+   从「驾驶舱配置」B1 粘过来的值经常带这些杂质：
+     · 前后空格 / 中间换行（单元格里按了 Alt+Enter）
+     · 英文或中文引号： "ghp_xxx"  'ghp_xxx'  “ghp_xxx”
+     · 连 "Bearer " 或 "token " 一起粘进来
+   任何一种都会让 Authorization 头变成非法值，GitHub 直接 401。
+   这里统一剥到只剩令牌本体，减少一类"看起来填了却推不动"的故障。 */
+function cleanTok(v) {
+  var t = s(v);
+  if (!t) return '';
+  t = t.replace(/[\s\u00a0\u3000]/g, '');            // 半角/全角空格、换行、制表符
+  t = t.replace(/^Bearer/i, '').replace(/^token/i, '');
+  t = t.replace(/^['"“”‘’]+/, '').replace(/['"“”‘’]+$/, '');
+  return t;
+}
 
 function num(x) {
   if (x === null || x === undefined) return 0;
@@ -552,8 +581,14 @@ function main() {
     }
 
     var cfgSh = sheet(CFG.SHEET_CFG);
-    var tok = cfgSh ? s(getCell(cfgSh, 'B1')) : '';
-    if (!tok) throw new Error('「' + CFG.SHEET_CFG + '」B1 缺少 GitHub 令牌');
+    if (!cfgSh) throw new Error('缺少工作表「' + CFG.SHEET_CFG + '」—— PUSH=true 时需要在它的 B1 填 GitHub 令牌');
+    var tok = cleanTok(getCell(cfgSh, 'B1'));
+    if (!tok) throw new Error('「' + CFG.SHEET_CFG + '」B1 缺少 GitHub 令牌（PUSH=true 时必须填）');
+    if (!/^(gh[pousr]_|github_pat_)/.test(tok)) {
+      // 不打印令牌本身，只提示前 4 位，避免日志外泄
+      say('⚠️ B1 的值不像 GitHub 令牌（应以 ghp_ / github_pat_ 开头，实际前 4 位「'
+        + tok.substring(0, 4) + '」），仍继续尝试');
+    }
 
     var cur = ghGet(tok);
     if (cur && cur.content) {
