@@ -158,37 +158,39 @@
   .pdnote{color:#5f7691;font-size:10.5px;white-space:nowrap}
   .pdnote b{color:#8298b0;font-weight:600}
 
-  /* ---- 站点卡栅格：宽屏 8 列，逐级降；饼图 + 4 行指标 ---- */
-  .pdgrid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:5px 7px}
-  /* 单站视角只有 1 张卡：别再按 8 列切，否则卡被挤到 90px 宽、文字全折行。
+  /* ---- 站点卡栅格：宽屏 6 列（卡宽约 220px，够放「汽/柴/合计/均价/车次/单加」全标签），逐级降 ---- */
+  .pdgrid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px 8px}
+  /* 单站视角只有 1 张卡：别再按 6 列切，否则卡被挤到 90px 宽、文字全折行。
      两个类名的优先级高于下面任何 @media 里的单类名，窄屏也不会被覆盖回去。 */
-  .pdgrid.one{grid-template-columns:minmax(0,236px)}
-  @media (max-width:1340px){ .pdgrid{grid-template-columns:repeat(6,minmax(0,1fr))} }
-  @media (max-width:1020px){ .pdgrid{grid-template-columns:repeat(5,minmax(0,1fr))} }
-  @media (max-width:860px){ .pdgrid{grid-template-columns:repeat(4,minmax(0,1fr))} }
-  @media (max-width:640px){ .pdgrid{grid-template-columns:repeat(3,minmax(0,1fr))} }
-  @media (max-width:470px){ .pdgrid{grid-template-columns:repeat(2,minmax(0,1fr))} }
+  .pdgrid.one{grid-template-columns:minmax(0,268px)}
+  @media (max-width:1340px){ .pdgrid{grid-template-columns:repeat(5,minmax(0,1fr))} }
+  @media (max-width:1120px){ .pdgrid{grid-template-columns:repeat(4,minmax(0,1fr))} }
+  @media (max-width:900px){ .pdgrid{grid-template-columns:repeat(3,minmax(0,1fr))} }
+  @media (max-width:640px){ .pdgrid{grid-template-columns:repeat(2,minmax(0,1fr))} }
+  @media (max-width:430px){ .pdgrid{grid-template-columns:minmax(0,1fr)} }
 
-  .pdc{display:flex;gap:6px;align-items:center;min-width:0;
-    padding:4px 5px 4px 4px;border-radius:7px;background:#0b1622;
+  .pdc{display:flex;gap:7px;align-items:flex-start;min-width:0;
+    padding:5px 6px 5px 5px;border-radius:7px;background:#0b1622;
     border:1px solid #14243a}
   .pdc.zero{opacity:.42}
   .pdc.vx{border-color:#3b3018;background:#12100a}     /* 小额配送（虚拟实体） */
-  .pdp{flex:0 0 auto;width:34px;height:34px;display:block}
+  .pdp{flex:0 0 auto;width:34px;height:34px;display:block;margin-top:2px}
   .pdp .ring{fill:none;stroke:#17293c;stroke-width:6}
   .pdp .seg{fill:none;stroke-width:6;transition:stroke-dasharray .25s}
-  .pdm{min-width:0;flex:1 1 auto;line-height:1.32}
+  .pdm{min-width:0;flex:1 1 auto;line-height:1.34}
   .pdn{display:flex;align-items:baseline;gap:5px;font-size:11.5px;color:#dbe7f4;
-    font-weight:640;white-space:nowrap;overflow:hidden}
+    font-weight:640;white-space:nowrap;overflow:hidden;margin-bottom:1px}
   .pdn .nm{overflow:hidden;text-overflow:ellipsis}
   .pdn .pdr{color:#f0d9a8;font-weight:700;font-variant-numeric:tabular-nums;
     margin-left:auto;flex:0 0 auto;font-size:11.5px}
-  .pdv{color:#8fa6bd;font-size:10.5px;white-space:nowrap;overflow:hidden;
+  .pdv{color:#8fa6bd;font-size:10px;white-space:nowrap;overflow:hidden;
     text-overflow:ellipsis;font-variant-numeric:tabular-nums;letter-spacing:-.1px}
-  .pdv b{font-weight:640}
+  .pdv b{font-weight:660;color:#c3d5e8}
   .pdv .gg{color:#e0b96a}
   .pdv .dd{color:#6fa8e8}
-  .pdv .u{color:#5c7290;font-size:9.5px}
+  .pdv .u{color:#5c7290;font-size:9px}
+  .pdv .k{color:#7d93ab}                              /* 「汽」「柴」「合计」「均价」「车次」「单加」标签 */
+  .pdv .sep{color:#3f5570;margin:0 1px}                /* 分隔点 */
   .pdv.pdz{color:#71889f}
   .cols{display:flex;align-items:flex-end;justify-content:center;gap:5px;height:228px;
     flex:none;padding-top:56px;overflow-x:clip;overflow-y:visible}
@@ -1604,21 +1606,43 @@ function pdCard(it, rs) {
   const un = !!it.un || tot <= 0;                 // 源表未拆柴汽 → 空环，不臆造比例
   const rt = un ? '—' : pdRatioTxt(vals);
   const zero = !(it.t > 0);
-  const flow = (it.fv != null || it.fsp != null)
-    ? `${_i0(it.fv)}<span class="u">车</span> ${it.fsp == null ? '—' : it.fsp}/${it.fdp == null ? '—' : it.fdp}`
-    : '<span class="u">无车流/单加</span>';
+  /* 车流/单加全部来自各站 V1「今日填报」前一日两行实报值，不加约等号 */
+  const hasFlow = (it.fv != null);
   const gTxt = un ? '—' : n(it.g);
   const dTxt = un ? '—' : n(it.d);
+  /* t 在 build 端已按「汽+柴（均取 1 位）相加」算好，直接显示即自洽 */
+  const sumTxt = n(it.t);
   const pTxt = (v) => v == null ? '—' : v.toFixed(2);
+  const sep = '<span class="sep">·</span>';
   return `<div class="pdc${zero ? ' zero' : ''}${it.name === '小额配送' ? ' vx' : ''}"`
-    + ` title="${it.name}　汽 ${gTxt}t / 柴 ${dTxt}t　单价 汽${pTxt(it.gp)} 柴${pTxt(it.dp)} 元/L">`
+    + ` title="${it.name}　汽 ${gTxt}t / 柴 ${dTxt}t / 合计 ${sumTxt}t`
+    + `　平均单价 汽${pTxt(it.gp)} 柴${pTxt(it.dp)} 元/L`
+    + (hasFlow ? `　前一日总车次 ${it.fv}（汽 ${it.fg} / 柴 ${it.fd}）`
+      + `　平均单加 汽 ${it.fsp} / 柴 ${it.fdp} 升/次` : '　无车流数据') + `">`
     + `<svg class="pdp" viewBox="0 0 34 34">${pdPie(un ? [] : vals, rs.it.map(s => s.c))}</svg>`
     + '<div class="pdm">'
     +   `<div class="pdn"><span class="nm">${it.name}</span><span class="pdr">${rt}</span></div>`
-    +   `<div class="pdv"><span class="gg">汽${gTxt}</span> <span class="dd">柴${dTxt}</span><span class="u">t</span>`
-    +     `${un ? '<span class="u"> 未拆</span>' : ''}</div>`
-    +   `<div class="pdv"><span class="gg">${pTxt(it.gp)}</span> <span class="dd">${pTxt(it.dp)}</span><span class="u">元/L</span></div>`
-    +   `<div class="pdv pdz">${flow}</div>`
+    // ① 分油品吨 + 合计吨
+    +   `<div class="pdv"><span class="k">汽</span><span class="gg">${gTxt}</span>`
+    +     `<span class="u">t</span> ${sep} <span class="k">柴</span><span class="dd">${dTxt}</span>`
+    +     `<span class="u">t</span> ${sep} <span class="k">合计</span><b>${sumTxt}</b>`
+    +     `<span class="u">t</span>${un ? '<span class="u"> 未拆</span>' : ''}</div>`
+    // ② 平均单价（元/升，加权 = 金额÷升数）
+    +   `<div class="pdv"><span class="k">均价</span>`
+    +     `<span class="gg">${pTxt(it.gp)}</span> / <span class="dd">${pTxt(it.dp)}</span>`
+    +     `<span class="u"> 元/L</span></div>`
+    // ③ 前一日总车次（汽/柴车次拆分）
+    +   `<div class="pdv pdz"><span class="k">车次</span>`
+    +     (hasFlow
+          ? `<b>${_i0(it.fv)}</b> <span class="gg">汽${_i0(it.fg)}</span> / <span class="dd">柴${_i0(it.fd)}</span>`
+          : '— <span class="u">无车流</span>')
+    +   `</div>`
+    // ④ 平均单加（升/次）
+    +   `<div class="pdv pdz"><span class="k">单加</span>`
+    +     (hasFlow
+          ? `<span class="gg">${it.fsp == null ? '—' : it.fsp}</span> / <span class="dd">${it.fdp == null ? '—' : it.fdp}</span>`
+          : '—')
+    +     `<span class="u"> L/次</span></div>`
     + '</div></div>';
 }
 
@@ -1663,21 +1687,27 @@ function renderPd(P) {
     + `<span class="pdk">${who}合计 <b class="pdt">${n(sumT)}</b> 吨</span>`
     + `<span class="pdk">${rs.n} <b class="pdt">${aggTxt}</b></span>`;
   if (sumG != null && sumD != null && (sumG + sumD) > 0) {
-    h += `<span class="pdk">合计 <span style="color:#e0b96a">汽 ${n(sumG)}</span>`
-      + ` / <span style="color:#6fa8e8">柴 ${n(sumD)}</span> t</span>`;
+    h += `<span class="pdk">其中 <span style="color:#e0b96a">汽油 ${n(sumG)}</span>`
+      + ` + <span style="color:#6fa8e8">柴油 ${n(sumD)}</span> 吨</span>`;
+  }
+  if (!P && PD.flow_veh != null) {
+    const ck = PD.flow_check || {};
+    h += `<span class="pdk">前一日总车次 <b class="pdt">${_i0(PD.flow_veh)}</b>`
+      + `（<span style="color:#e0b96a">汽 ${_i0(ck.gasVeh)}</span>`
+      + ` / <span style="color:#6fa8e8">柴 ${_i0(ck.dieVeh)}</span>）</span>`;
   }
   if (gp != null || dp != null) {
-    h += `<span class="pdk">均价 <span style="color:#e0b96a">${gp == null ? '—' : gp.toFixed(2)}</span>`
-      + ` / <span style="color:#6fa8e8">${dp == null ? '—' : dp.toFixed(2)}</span> 元/L</span>`;
+    h += `<span class="pdk">平均单价 <span style="color:#e0b96a">汽 ${gp == null ? '—' : gp.toFixed(2)}</span>`
+      + ` / <span style="color:#6fa8e8">柴 ${dp == null ? '—' : dp.toFixed(2)}</span> 元/L</span>`;
   }
   h += '<span class="pdseg" id="pd_ri">'
     + PD_RATIO.map((s, i) => `<button data-ri="${i}" class="${i === PDRI ? 'on' : ''}">${s.n}</button>`).join('')
     + '</span><span class="pdseg" id="pd_fmt">'
     + `<button data-f="10" class="${PDFMT === '10' ? 'on' : ''}">10 分制</button>`
     + `<button data-f="raw" class="${PDFMT === 'raw' ? 'on' : ''}">原值</button></span>`
-    + `<span class="pdnote" title="车流量＝非油V1「车次累计 ÷ 天数」折日均，不是按日实采；单加＝升÷单（比值，跨期可直接用）。若要真实前一日车次，把 _flow.json 里 stations[*].v 换成当日值即可，页面无需改动。${PD.flow_note ? '\n' + PD.flow_note : ''}">`
-    + `车次/日 · 单加 <b>汽/柴 L</b> `
-    + `<b>≈</b> 非油V1${PD.flow_asof ? '（' + PD.flow_asof + '）' : ''}</span>`
+    + `<span class="pdnote" title="车流与单加逐站取各站非油 V1 报表「今日填报」前一日两行（南/东 + 北/西）的实报值：C 柴油车次 / D 柴油升数 / E 汽油车次 / F 汽油升数，两行相加。不做日均分摊、不做估算。单加 = 升 ÷ 次。15 对逐站加总与非油「单数统计」公司级当日值逐位吻合。${PD.flow_note ? '\n' + PD.flow_note : ''}">`
+    + `前一日车次 · 单加 <b>汽/柴</b> L `
+    + `实报 非油V1${PD.flow_asof ? '（' + PD.flow_asof + '）' : ''}</span>`
     + '</div>';
 
   h += `<div class="pdgrid${list.length === 1 ? ' one' : ''}">`
