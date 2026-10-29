@@ -18,7 +18,7 @@ var CFG = {
   PATH  : '_incoming/data.json',
 
   SHEET_CFG : '驾驶舱配置',   // ← 需自建：A1=会计月起止, B1=GitHub令牌, C1..=运行状态(脚本只写这里)
-  PUSH      : true,          // ★ 首次验证请设 false：只解析并把摘要写到 C/D 列，核对无误再改 true
+  PUSH      : false,         // ★ 出厂默认 false：只解析，把摘要写进 C 列。核对无误后改 true 才会真推。
 
   // 各表读取规模（比实际用区略宽即可，多读的空行会被忽略）
   SALE : { name: '销售日报', rows: 1601, cols: 28 },
