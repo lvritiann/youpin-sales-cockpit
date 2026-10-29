@@ -1,7 +1,17 @@
 /* ==========================================================================
- * 成品油日报 → GitHub _incoming/data.json   v2.2
+ * 成品油日报 → GitHub _incoming/data.json   v2.3
  * 运行位置：金山文档「202611销售及库存日报（新).xlsx」内的 AirScript
  * 触发方式：定时任务（8:30 / 9:00 / 9:30 / 10:00 / 11:30 各挂一条，跑同一个 main）
+ *
+ * v2.3 变更（2026-10-29，修 GET 响应解析崩溃）
+ *  1) ★ ghGet 原先写 JSON.parse(r.body || r.text || '{}')。HTTP.fetch 的返回对象
+ *     【没有 body 属性】，只有 text() 方法 —— r.body 为 undefined 就落到 r.text，
+ *     而那是函数对象，JSON.parse 隐式 String(函数) 得到 "text(){return ...}"，
+ *     抛 SyntaxError: Unexpected token 'e', "text(){retu"... is not valid JSON。
+ *     新增 respText() 三级兜底（函数 → 字符串 → 其它），两种返回形态都能取正文。
+ *  2) PUT 结果判断加 Number() 归一 —— 有的实现 status 给字符串 '200'，
+ *     原先用 === 比数字会误判成失败，明明推上去了却报失败。
+ *  3) GET 返回非 JSON 时不再崩溃，按「远端无文件」处理并继续推送。
  *
  * v2.2 变更（2026-10-29，「驾驶舱配置」表不存在导致推送中断）
  *  1) ★ 令牌改为两处来源，取到其一即可：①「驾驶舱配置」B1  ② 代码顶部 CFG.TOKEN。
@@ -36,7 +46,7 @@
  *  4) 全零日块 = 未填报，跳过（不可补零，会把日均拉低）。
  * ========================================================================== */
 
-var VER = 'v2.2';
+var VER = 'v2.3';
 
 var CFG = {
   OWNER : 'lvritiann',
@@ -535,6 +545,20 @@ function http(method, url, opts) {
   throw new Error('HTTP 不支持 ' + method + ' 方法');
 }
 
+/* 从 HTTP.fetch 的返回里安全地取出响应正文。
+   ★ 2026-10-29 踩过的坑：该返回对象【没有 body 属性】，只有 text() 方法。
+     老代码写成 JSON.parse(r.body || r.text || '{}')，r.body 是 undefined 就落到 r.text，
+     而 r.text 是【函数对象】，JSON.parse 会隐式 String(函数) 成 "text(){return ...}"，
+     直接抛 SyntaxError: Unexpected token 'e', "text(){retu"... is not valid JSON。
+   这里按「函数优先 → 字符串 → 其它」三级兜底，两种返回形态都能取到正文。 */
+function respText(r) {
+  if (!r) return '';
+  if (typeof r.text === 'function') { try { return String(r.text()); } catch (e) {} }
+  if (typeof r.body === 'string') return r.body;
+  if (r.body !== undefined && r.body !== null && typeof r.body !== 'function') return String(r.body);
+  return '';
+}
+
 function ghGet(tok) {
   var r = http('GET', apiUrl() + '?ref=' + CFG.BRANCH, {
     headers: { 'Authorization': 'Bearer ' + tok, 'Accept': 'application/vnd.github+json',
@@ -542,7 +566,11 @@ function ghGet(tok) {
     timeout: 20000
   });
   if (!r || r.status !== 200) return null;
-  var j = JSON.parse(r.body || r.text || '{}');
+  var txt = respText(r);
+  if (!txt) return null;
+  var j = {};
+  try { j = JSON.parse(txt) || {}; }
+  catch (e) { say('（GET 返回不是 JSON，按无远端文件处理：' + txt.substring(0, 80) + '）'); return null; }
   return { sha: j.sha, size: j.size, content: j.content };
 }
 
@@ -629,9 +657,11 @@ function main() {
     }
 
     var res = ghPut(tok, json, cur ? cur.sha : null);
-    var st = res ? res.status : '无响应';
-    say('推送 HTTP ' + st + (st === 200 || st === 201 ? ' 成功' : ' 失败'));
-    if (!(st === 200 || st === 201)) say('响应 ' + s(res && (res.body || res.text)).substring(0, 180));
+    var raw = res && res.status !== undefined && res.status !== null ? res.status : '无响应';
+    var st = res ? Number(res.status) : 0;          // 有的实现给字符串 '200'，统一转数字再比
+    var ok = st === 200 || st === 201;
+    say('推送 HTTP ' + raw + (ok ? ' 成功' : ' 失败'));
+    if (!ok) say('响应 ' + respText(res).substring(0, 180));
     flush();
     return json;
   } catch (e) {
