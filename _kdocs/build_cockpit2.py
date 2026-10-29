@@ -815,7 +815,7 @@ yearly['roads'] = {
     'note': '8 条高速路段 = 15 对实体站按所属路段归集，不含小额配送（小额无路段归属）',
 }
 
-payload = {'meta': {'generated': datetime.datetime.now().strftime('%Y-%m-%d %H:%M'),                    'month_order': ['2026-11', '2026-10', '2026-09'],
+payload = {'meta': {'generated': (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).strftime('%Y-%m-%d %H:%M'),                    'month_order': ['2026-11', '2026-10', '2026-09'],
                     'trend': TREND},
            'months': months, 'yearly': yearly,
            'daily_win': WINDOWS, 'last_date': LAST_DT.isoformat() if LAST_DT else ''}
