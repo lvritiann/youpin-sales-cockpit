@@ -1,0 +1,2012 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>成品油销售数据驾驶舱</title>
+<style>
+  :root{
+    --bg:#070e18;
+    --card:#0d1927;
+    --card2:#101f30;
+    --ink:#e9f1fb;
+    --ink2:#c3d2e5;
+    --sub:#7e91a9;
+    --line:#1b2b40;
+    --line2:#152338;
+    --gold:#d9b878;
+    --gold2:#f0d9a8;
+    --cyan:#38bdf8;
+    --blue:#2f7fd4;
+    --red:#ff5c52;
+    --green:#2fd39b;
+    --r:10px;
+    --sh:0 1px 0 rgba(255,255,255,.03) inset, 0 14px 34px -20px rgba(0,0,0,.9);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;color:var(--ink);background:var(--bg);
+    font:13px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  body{
+    background-image:
+      radial-gradient(1200px 560px at 12% -12%,rgba(47,127,212,.20) 0%,rgba(47,127,212,0) 62%),
+      radial-gradient(1000px 520px at 92% -6%,rgba(217,184,120,.10) 0%,rgba(217,184,120,0) 58%),
+      linear-gradient(rgba(56,189,248,.030) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(56,189,248,.030) 1px,transparent 1px);
+    background-size:auto,auto,46px 46px,46px 46px;
+  }
+  .wrap{width:100%;max-width:none;margin:0;padding:0 14px 34px}
+
+  /* ---------- 顶栏 ---------- */
+  .top{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;
+    padding:11px 0 10px;margin-bottom:11px;border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:15px;min-width:0}
+  .brand>div{min-width:0}
+  .mark{flex:none;display:flex;align-items:center;height:60px}
+  .mark img{height:60px;width:auto;max-width:none;display:block;
+    filter:brightness(1.16) saturate(1.05) drop-shadow(0 3px 14px rgba(0,0,0,.66))}
+  h1{margin:0;font-size:19px;font-weight:650;letter-spacing:.3px}
+  .sub{margin-top:3px;font-size:11.5px;color:var(--sub)}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .chip{font-size:11.5px;padding:6px 12px;border-radius:8px;
+    background:rgba(56,189,248,.06);border:1px solid var(--line);color:var(--sub)}
+  .chip b{color:var(--ink2);font-weight:640}
+  .seg{display:inline-flex;background:rgba(255,255,255,.04);border:1px solid var(--line);
+    border-radius:9px;padding:3px}
+  .seg button{border:0;background:transparent;font:inherit;font-size:11.5px;color:var(--sub);
+    padding:5px 13px;border-radius:7px;cursor:pointer;transition:.18s}
+  .seg button:hover{color:var(--ink2)}
+  .seg button.on{background:linear-gradient(135deg,#1d4f7c,#2f7fd4);color:#fff;
+    box-shadow:0 0 0 1px rgba(56,189,248,.35),0 6px 16px -8px rgba(56,189,248,.7)}
+
+  /* ---------- 控制条（会计月 / 视角） ---------- */
+  .vbar{display:flex;align-items:center;gap:10px 16px;flex-wrap:wrap;margin-bottom:12px;
+    padding:8px 14px;border-radius:var(--r);
+    background:linear-gradient(90deg,rgba(47,127,212,.11),rgba(217,184,120,.05));
+    border:1px solid var(--line)}
+  .vseg-wrap{display:flex;align-items:center;gap:9px}
+  .vlb{font-size:11px;font-weight:600;color:var(--sub);white-space:nowrap;letter-spacing:.2px}
+  .vnote{font-size:10.5px;color:var(--sub);margin-left:auto;white-space:nowrap}
+  .vnote b{color:var(--ink2);font-weight:640}
+
+  /* ---------- 12 栅格 ---------- */
+  .g12{display:grid;grid-template-columns:repeat(12,1fr);gap:12px;margin-bottom:12px}
+  .s4{grid-column:span 4}.s6{grid-column:span 6}.s8{grid-column:span 8}.s12{grid-column:span 12}
+  .card{background:linear-gradient(180deg,#0f1d2e 0%,#0c1725 100%);
+    border-radius:var(--r);border:1px solid var(--line);box-shadow:var(--sh);
+    padding:16px 18px 18px;min-width:0;display:flex;flex-direction:column}
+
+  /* ---------- 年度 KPI ---------- */
+  .kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));padding:0;
+    overflow:hidden;margin-bottom:12px}
+  .kpi{padding:16px 20px 18px;position:relative;min-width:0;overflow:hidden}
+  .kpi+.kpi:before{content:"";position:absolute;left:0;top:16px;bottom:16px;width:1px;
+    background:var(--line)}
+  .kpi .k{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--sub);font-weight:500}
+  .kpi .k .per{color:#6f839c;font-weight:400;margin-left:1px}
+  .kpi .k svg{width:14px;height:14px;flex:none;fill:none;stroke:var(--gold);
+    stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+  .kpi .v{font-size:30px;font-weight:700;letter-spacing:-1px;line-height:1.05;margin-top:10px;
+    font-variant-numeric:tabular-nums;white-space:nowrap;color:#fff}
+  .kpi .v small{font-size:12px;font-weight:500;color:var(--sub);margin-left:5px;letter-spacing:0}
+  .kpi .v.hl-up{color:var(--red)}
+  .kpi .v.hl-dn{color:var(--green)}
+  .kpi .t{margin-top:7px;font-size:11px;color:var(--sub);line-height:1.6;min-height:36px}
+  .kpi .t.tiny{font-size:10.5px;letter-spacing:-.1px}
+  .kpi .t em{font-style:normal;font-weight:700;font-size:11.5px}
+  .kpi .t em.up{color:var(--red)}
+  .kpi .t em.dn{color:var(--green)}
+  .kpi .t em.flat{color:var(--sub)}
+
+  /* ---------- 月度信息带 ---------- */
+  .mkpi{display:flex;flex-direction:row;align-items:stretch;padding:0;overflow:hidden;
+    margin-bottom:12px;border-radius:var(--r)}
+  .mkpi .mi{flex:1;min-width:0;padding:10px 15px;position:relative;display:flex;
+    align-items:baseline;gap:7px;white-space:nowrap}
+  .mkpi .mi+.mi:before{content:"";position:absolute;left:0;top:11px;bottom:11px;width:1px;
+    background:var(--line)}
+  .mkpi .mi .l{font-size:10.5px;color:var(--sub);font-weight:500}
+  .mkpi .mi .n{font-size:14.5px;font-weight:680;font-variant-numeric:tabular-nums;
+    color:var(--ink);letter-spacing:-.2px}
+  .mkpi .mi .u{font-size:10px;color:var(--sub)}
+  .mkpi .mi .u em{font-style:normal;font-weight:660;font-variant-numeric:tabular-nums}
+  .mkpi .mi .u em.up{color:var(--red)}
+  .mkpi .mi .u em.dn{color:var(--green)}
+
+  /* ---------- 卡片标题 ---------- */
+  .h{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:13px}
+  .h h2{margin:0;font-size:13px;font-weight:640;letter-spacing:.3px;
+    display:flex;align-items:center;gap:8px;color:var(--ink)}
+  .h h2:before{content:"";width:3px;height:12px;border-radius:2px;flex:none;
+    background:linear-gradient(180deg,var(--cyan),var(--gold))}
+  .h>span{font-size:10.5px;color:var(--sub);text-align:right;white-space:nowrap;
+    min-width:0;overflow:hidden;text-overflow:ellipsis}
+  /* 标题行右侧「控件 + 说明」：月份下拉要能在窄屏跟着换行，不撑破卡片 */
+  .hright{display:flex;align-items:center;gap:9px;min-width:0}
+  .rdsel{appearance:none;-webkit-appearance:none;
+    background-color:#0d1b28;border:1px solid #1d3550;color:var(--ink);
+    font-family:inherit;font-size:10.5px;line-height:1;padding:4px 21px 4px 8px;
+    border-radius:5px;cursor:pointer;flex:none;
+    background-image:linear-gradient(45deg,transparent 50%,#7d94ab 50%),
+                     linear-gradient(135deg,#7d94ab 50%,transparent 50%);
+    background-position:calc(100% - 13px) calc(50% - 1px),calc(100% - 9px) calc(50% - 1px);
+    background-size:4px 4px,4px 4px;background-repeat:no-repeat;
+    transition:border-color .18s,background-color .18s}
+  .rdsel:hover{border-color:#2c4e70;background-color:#112336}
+  .rdsel:focus{outline:none;border-color:var(--cyan)}
+  .rdsel option{background:#0d1b28;color:var(--ink)}
+
+  /* ---------- 日柱 ---------- */
+  /* ---- 前一日各站销量：日走势柱图正上方的一条极窄小字带 ----
+     只占一行高（≈22px），16 项小字横排；窄屏自动换行，不撑高卡片。
+     数字用 tabular-nums，保证小数点对齐、一眼能扫出高低。 */
+  .pdbar{padding:8px 0 9px;margin:2px 0 12px;font-size:12.5px;line-height:1.55;
+    border-top:1px solid #14263a;border-bottom:1px solid #14263a;color:#93aac4}
+  .pdbar:empty{display:none}
+  .pdsum{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 18px;margin-bottom:6px}
+  .pdgrid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));
+    gap:3px 10px;align-items:baseline}
+  @media (max-width:900px){ .pdgrid{grid-template-columns:repeat(4,minmax(0,1fr))} }
+  @media (max-width:560px){ .pdgrid{grid-template-columns:repeat(2,minmax(0,1fr))} }
+  .pdbar .pdk{color:#b6c9de;font-weight:600;white-space:nowrap;letter-spacing:.2px;font-size:12.5px}
+  .pdbar .pdt{color:#e8cf95;font-weight:700;font-variant-numeric:tabular-nums;
+    white-space:nowrap;font-size:14.5px}
+  .pdbar .pdi,.pdbar .pdx{white-space:nowrap;font-size:12.5px;overflow:hidden;text-overflow:ellipsis}
+  .pdbar .pdi b,.pdbar .pdx b{color:#fff;font-weight:640;font-size:13.5px;
+    font-variant-numeric:tabular-nums;margin-left:3px}
+  .pdbar .pdi.zero b{color:#5c7590}
+  .pdbar .pdx{color:#a8bcd2}
+  .pdbar .sep{color:#2b4a6b}
+  .cols{display:flex;align-items:flex-end;justify-content:center;gap:5px;height:228px;
+    flex:none;padding-top:56px;overflow-x:clip;overflow-y:visible}
+  .col{flex:1 1 auto;max-width:58px;min-width:9px;height:100%;display:flex;
+    flex-direction:column;justify-content:flex-end;align-items:center;gap:4px;position:relative}
+  .col .bv{min-height:12px;font-size:10px;color:#a9c0d8;font-weight:600;font-variant-numeric:tabular-nums;line-height:1;
+    white-space:nowrap;letter-spacing:-.2px}
+  .col .bar{width:100%;max-width:26px;border-radius:3px 3px 1px 1px;position:relative;
+    overflow:hidden;background:linear-gradient(180deg,#f0d9a8,#b8934a);transition:height .45s}
+  .col .bar>u{position:absolute;left:0;right:0;bottom:0;
+    background:linear-gradient(180deg,#3f8fd0,#1d4d7c)}
+  .col .lb{font-size:9px;color:#6d829c;font-variant-numeric:tabular-nums}
+  .col:hover .bar{box-shadow:0 0 0 2px rgba(56,189,248,.45)}
+  .col .tip{position:absolute;bottom:calc(100% - 10px);left:50%;transform:translateX(-50%);
+    background:#0b1622;color:#fff;font-size:11px;line-height:1.6;padding:7px 11px;
+    border-radius:7px;white-space:nowrap;opacity:0;pointer-events:none;transition:.15s;
+    z-index:200;border:1px solid #2b4a6b;
+    box-shadow:0 14px 34px -10px rgba(0,0,0,.95),0 0 0 1px rgba(56,189,248,.12)}
+  .col:hover .tip{opacity:1}
+  .col:hover{z-index:210}
+  /* 边缘柱子：提示框改为贴边对齐，避免横向溢出图表区 */
+  .col:nth-child(-n+3) .tip{left:0;transform:none}
+  .col:nth-last-child(-n+3) .tip{left:auto;right:0;transform:none}
+
+  /* ---------- 横条 ---------- */
+  .bars{display:flex;flex-direction:column;gap:9px;flex:1;justify-content:center}
+  .bl{display:grid;grid-template-columns:96px 1fr 92px;gap:12px;align-items:center;font-size:12.5px}
+  .bl .nm{color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
+  .bl .tr{height:8px;border-radius:4px;background:#152338;overflow:hidden;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.03)}
+  .bl .fl{height:100%;border-radius:4px;
+    background:linear-gradient(90deg,#1b5a90,#4aa8e8);transition:width .55s ease;
+    box-shadow:0 0 12px -2px rgba(74,168,232,.55)}
+  .bl.top .fl{background:linear-gradient(90deg,#8a6a2a,#e8cf95);
+    box-shadow:0 0 14px -2px rgba(217,184,120,.6)}
+  .bl .vl{text-align:right;font-variant-numeric:tabular-nums;font-weight:640;
+    color:var(--ink2);white-space:nowrap;font-size:12px}
+  .bl .vl small{color:var(--sub);font-weight:400;margin-left:4px;font-size:10.5px}
+
+  /* 15 对：一级 → 二级 */
+  .pb{cursor:pointer;border-radius:7px;padding:3px 4px;margin:-3px -4px;transition:.16s}
+  .pb:hover{background:rgba(56,189,248,.07)}
+  .pb .nm i{font-style:normal;color:#5f7590;font-size:10px;margin-right:7px;
+    font-variant-numeric:tabular-nums}
+  .pb .nm s{text-decoration:none;color:#4e627b;font-size:9.5px;margin-left:6px}
+  .pb .sub{grid-column:1/-1;display:none;margin:6px 0 2px 0;padding:1px 0 1px 12px;
+    border-left:2px solid #1d3049}
+  .pb.open .sub{display:block}
+  .pb .sr{display:grid;grid-template-columns:120px 1fr 78px;gap:10px;align-items:center;
+    font-size:11px;color:#8ea3bd;margin:5px 0}
+  .pb .sr span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pb .sr .tr{height:5px;border-radius:3px;background:#152338;overflow:hidden}
+  .pb .sr .fl{height:100%;border-radius:3px;background:linear-gradient(90deg,#2b6fa8,#c9a45c)}
+  .pb .sr b{text-align:right;font-variant-numeric:tabular-nums;font-weight:620;
+    color:#a8bcd4;font-size:10.5px}
+
+  .cust{display:grid;grid-template-columns:1fr 1fr;gap:26px;flex:1;align-items:center}
+  .ygrid{display:grid;grid-template-columns:1fr 1.15fr;gap:26px;align-items:start}
+
+  /* ---------- 环形 ---------- */
+  .donut-wrap{display:flex;align-items:center;gap:20px;flex:1}
+  .donut{position:relative;width:158px;height:158px;flex:none}
+  .donut svg{width:100%;height:100%;display:block}
+  .donut .ctr{position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center}
+  .donut .ctr b{font-size:20px;font-weight:700;letter-spacing:-.5px;
+    font-variant-numeric:tabular-nums;color:#fff}
+  .donut .ctr span{font-size:9.5px;color:var(--sub);margin-top:3px;letter-spacing:0}
+  .clist{flex:1;display:flex;flex-direction:column;gap:8px;min-width:0}
+  .ci{display:grid;grid-template-columns:8px 1fr auto auto;gap:9px;align-items:center;
+    font-size:11.5px}
+  .ci i{width:8px;height:8px;border-radius:2px;flex:none}
+  .ci span{color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ci b{font-variant-numeric:tabular-nums;font-weight:640;white-space:nowrap;font-size:11.5px;
+    color:var(--ink)}
+  .ci u{text-decoration:none;color:var(--sub);font-size:10.5px;width:40px;text-align:right}
+  .cmp{margin-top:14px;padding-top:13px;border-top:1px dashed var(--line)}
+  .cmp .ttl{font-size:10.5px;color:var(--sub);margin-bottom:10px}
+  .cmp .row{display:grid;grid-template-columns:74px 1fr 54px;gap:11px;align-items:center;
+    font-size:11.5px;margin-bottom:8px}
+  .cmp .row .tr{height:7px;border-radius:4px;background:#152338;overflow:hidden}
+  .cmp .row .fl{height:100%;border-radius:4px;min-width:2px}
+  .cmp .row b{text-align:right;font-variant-numeric:tabular-nums;font-weight:640;
+    color:var(--ink2)}
+
+  /* ---------- 表格 ---------- */
+  .tbl-wrap{max-height:596px;overflow:auto;margin:0}
+  table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px}
+  thead th{position:sticky;top:0;z-index:2;background:#0a1521;color:var(--sub);
+    font-weight:600;text-align:right;padding:9px 12px;font-size:10.5px;white-space:nowrap;
+    letter-spacing:.3px;border-bottom:1px solid var(--line)}
+  tbody td{padding:0 12px;height:33px;text-align:right;font-variant-numeric:tabular-nums;
+    color:var(--ink2);border-bottom:1px solid #12202f;background:transparent}
+  thead th:first-child,.tbl-wrap td:first-child{text-align:left;padding-left:0}
+  /* 「路段」「站点对」列内容左对齐，表头必须跟着左对齐，否则表头与内容反向错位 */
+  thead th:nth-child(2),thead th:nth-child(3),
+  .tbl-wrap table tbody td:nth-child(2),.tbl-wrap table tbody td:nth-child(3){text-align:left}
+  tfoot td{padding:9px 12px;text-align:right;font-weight:660;color:var(--ink);
+    border-top:1px solid var(--line);background:rgba(56,189,248,.03);
+    font-variant-numeric:tabular-nums}
+  tfoot td:first-child{text-align:left;padding-left:0}
+  tbody tr:hover td{background:rgba(56,189,248,.055)}
+  tr.prow{cursor:pointer}
+  tr.prow td{background:rgba(56,189,248,.035);font-weight:640;color:var(--ink);
+    border-bottom:1px solid #17293e}
+  tr.prow:hover td{background:rgba(56,189,248,.09)}
+  /* 箭头占固定 16px 槽位，表头同步补齐 28px（12 padding + 16），保证表头与内容左边缘吻合 */
+  tr.prow .cv{display:inline-block;width:9px;text-align:center;color:#55708f;font-size:9px;
+    margin-right:7px;transition:transform .16s;transform-origin:50% 45%}
+  #tb-detail thead th:nth-child(3){padding-left:28px}
+  tr.prow.open .cv{transform:rotate(90deg)}
+  tr.srow td{color:#93a8c1;font-weight:400}
+  tr.srow td:nth-child(3){padding-left:34px;font-weight:600;color:var(--ink2)}
+  tr.srow td:nth-child(3):before{content:"└";color:#3d5570;margin-right:7px}
+  td .rk{display:inline-flex;width:20px;height:20px;border-radius:6px;align-items:center;
+    justify-content:center;font-size:10px;background:#152538;color:#7d92ab;font-weight:640}
+  td .rk.t1{background:linear-gradient(135deg,#e8cf95,#b8934a);color:#1a1206}
+  td .rk.t2{background:#22364e;color:#c7d6e6}
+  td .rk.t3{background:#3a2f22;color:#d8b98c}
+  .tag{font-size:10px;padding:2px 7px;border-radius:5px;background:rgba(56,189,248,.09);
+    color:#8fb2cf;font-weight:500;white-space:nowrap}
+  .tbtns{display:flex;align-items:center;gap:10px}
+  .tbtn{font-size:10.5px;padding:4px 10px;border-radius:7px;border:1px solid var(--line);
+    background:rgba(255,255,255,.03);color:var(--sub);cursor:pointer;transition:.16s;
+    font-family:inherit}
+  .tbtn:hover{background:rgba(56,189,248,.1);border-color:#2b4a6b;color:var(--cyan)}
+  .tbtn.on{background:rgba(56,189,248,.16);border-color:#3a6b96;color:#cfe8ff;
+    box-shadow:0 0 0 1px rgba(56,189,248,.22),0 0 16px -6px rgba(56,189,248,.7)}
+
+  /* ---------- 按对 / 按站切换条（复用非油驾驶舱 chips 逻辑） ---------- */
+  .pbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 12px;
+    padding:9px 14px;border-radius:var(--r);background:rgba(56,189,248,.045);
+    border:1px solid var(--line)}
+  .plabel{font-size:11px;font-weight:600;color:var(--sub);white-space:nowrap;
+    display:flex;align-items:baseline;gap:6px;flex:none}
+  .plabel span{font-size:10.5px;font-weight:400;color:var(--gold)}
+  .pchips{display:flex;flex-wrap:wrap;gap:6px;flex:1 1 auto;min-width:0}
+  .pchip{font:inherit;font-size:11px;line-height:1.5;padding:4px 11px;border-radius:7px;
+    cursor:pointer;user-select:none;white-space:nowrap;transition:.16s;
+    border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--sub)}
+  .pchip:hover{background:rgba(56,189,248,.12);border-color:#2b4a6b;color:var(--cyan)}
+  .pchip.on{background:linear-gradient(135deg,#1d4f7c,#2f7fd4);border-color:#3a6b96;color:#fff;
+    font-weight:600;box-shadow:0 0 0 1px rgba(56,189,248,.28),0 6px 14px -8px rgba(56,189,248,.8)}
+
+  /* ---------- 视角层（L1）：全公司 ↔ 单站（= 一对） ----------
+     切换控件放在页顶而不是页底：视角是「看什么」的第一层决定，
+     它同时决定 KPI / 轨迹 / 走势 / 结构四块的内容，不该埋在表格前。*/
+  .vbar{margin:0 0 12px;padding:10px 14px 11px;border-radius:var(--r);position:relative;
+    background:linear-gradient(135deg,rgba(56,189,248,.075),rgba(217,184,120,.05));
+    border:1px solid #1d3652;overflow:hidden}
+  .vbar:before{content:"";position:absolute;top:0;left:16px;right:16px;height:1px;
+    background:linear-gradient(90deg,transparent,rgba(74,168,232,.65),rgba(217,184,120,.5),transparent)}
+  .vrow{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .vscope{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:11px;
+    color:var(--sub);min-width:0;flex:1 1 auto}
+  .vscope b{font-size:14px;font-weight:700;color:var(--gold2);letter-spacing:.2px}
+  .vscope .vs{color:var(--ink2);font-weight:600}
+  .vscope .vsep{color:#2f4a68}
+  .vscope .vx{color:#7b90a8}
+  .vtag{font-size:9.5px;line-height:1.6;padding:1px 7px;border-radius:5px;font-weight:600;
+    white-space:nowrap;background:rgba(217,184,120,.14);border:1px solid rgba(217,184,120,.34);
+    color:var(--gold2)}
+  .vbar .pchips{margin-top:10px;padding-top:10px;border-top:1px dashed #1b3049;
+    align-items:center}
+  .vbar .plabel{font-size:10.5px;font-weight:500;color:#7b90a8;white-space:nowrap;
+    display:flex;align-items:baseline;gap:5px;flex:none;margin-right:4px}
+  .vbar .plabel span{color:var(--gold)}
+  /* 小额配送：与 15 对区分——金色描边 + 「公司级」标签，一眼看出它是虚拟实体 */
+  .pchip.vx{border-color:rgba(217,184,120,.42);color:#d9c19a;background:rgba(217,184,120,.07)}
+  .pchip.vx:hover{background:rgba(217,184,120,.16);border-color:rgba(217,184,120,.7);color:#f0d9a8}
+  .pchip.vx.on{background:linear-gradient(135deg,#7a5c22,#c9a45c);border-color:#d9b878;color:#fff}
+  .bl.pb.vx .nm{color:#d9c19a}
+  tr.prow.vx td{background:rgba(217,184,120,.075);color:#ecdcbb}
+  tr.prow.vx:hover td{background:rgba(217,184,120,.13)}
+  #tb-year tr.ag.vx td{background:rgba(217,184,120,.1);color:#ecdcbb}
+  /* 6 栏 KPI：两种视角槽位一致，只换内容，不换骨架 */
+  .kpis.six{grid-template-columns:repeat(6,minmax(0,1fr))}
+  @media (max-width:1560px){ .kpis.six .v{font-size:25px} }
+  @media (max-width:1320px){ .kpis.six{grid-template-columns:repeat(3,minmax(0,1fr))} }
+  @media (max-width:820px){ .kpis.six{grid-template-columns:repeat(2,minmax(0,1fr))} }
+  /* 排行条上的下钻入口：点「2站 ›」进单站视角，点其它地方仍是展开分站 */
+  .pb.cur .nm{color:var(--gold2);font-weight:640}
+  .pb .nm s.go{cursor:pointer;color:#5b7fa8;transition:color .15s}
+  .pb .nm s.go:hover{color:var(--gold2)}
+  /* 单站消费结构：柴汽环形 + 渠道 vs 公司基准 + 分站对比 */
+  .vstruct{display:grid;grid-template-columns:206px minmax(0,1fr) minmax(0,1fr);
+    gap:24px;align-items:start}
+  .vstruct .vt{font-size:10.5px;color:var(--sub);margin-bottom:10px;display:flex;
+    justify-content:space-between;align-items:baseline;gap:8px}
+  .vstruct .vt b{color:var(--ink2);font-weight:600}
+  .vstruct .vt em{font-style:normal;color:#5d7590;font-size:10px}
+  .vbase{display:grid;grid-template-columns:64px 1fr 46px 46px;gap:9px;align-items:center;
+    font-size:11px;margin-bottom:7px}
+  .vbase span{color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .vbase .tr{height:7px;border-radius:4px;background:#152338;overflow:hidden;position:relative}
+  .vbase .fl{height:100%;border-radius:4px;background:linear-gradient(90deg,#1b5a90,#4aa8e8)}
+  .vbase .mk{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--gold);
+    box-shadow:0 0 6px var(--gold)}
+  .vbase b{text-align:right;font-variant-numeric:tabular-nums;font-weight:640;color:var(--ink2);
+    font-size:11px}
+  .vbase u{text-decoration:none;text-align:right;font-size:10px;font-variant-numeric:tabular-nums;
+    color:var(--sub)}
+  /* 结构差值是「高出/低于公司均值多少个百分点」，不是涨跌，所以不用红绿，
+     用青 / 金两色区分方向，避免与销量涨跌色混淆 */
+  .vbase u.pos{color:#8fb2cf}
+  .vbase u.neg{color:#c9a45c}
+  .vsub{display:flex;flex-direction:column;gap:11px}
+  .vsub .vs1{padding:9px 11px;border-radius:8px;background:rgba(56,189,248,.045);
+    border:1px solid var(--line)}
+  .vsub .vs1 .t1{display:flex;justify-content:space-between;align-items:baseline;gap:8px;
+    font-size:11px;color:var(--ink2);font-weight:600;margin-bottom:7px}
+  .vsub .vs1 .t1 b{font-size:13px;font-variant-numeric:tabular-nums;color:var(--ink)}
+  .vsub .vs1 .t2{display:flex;justify-content:space-between;gap:8px;font-size:10px;color:var(--sub)}
+  .vsub .vs1 .bar2{height:6px;border-radius:3px;background:#152338;overflow:hidden;margin:7px 0 6px}
+  .vsub .vs1 .bar2 i{display:block;height:100%;border-radius:3px;
+    background:linear-gradient(90deg,#2b6fa8,#c9a45c)}
+  @media (max-width:900px){ .vstruct{grid-template-columns:1fr;gap:18px} }
+
+  /* ---------- 双表并排：把两张「过大」的表压到半宽 + 限高滚动 ---------- */
+  .tb2{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .tb2>.card{grid-column:auto}
+  .tb2 .tbl-wrap{max-height:470px;flex:1 1 auto;min-height:0}
+  .tb2 table{font-size:11.5px}
+  .tb2 thead th{padding:7px 9px;font-size:10px}
+  /* 2026 的 * 号上标会顶高表头，导致两表首行不对齐，压掉它的行高 */
+  .tb2 thead sup{font-size:8px;line-height:0;position:relative;top:-3px}
+  .tb2 tbody td{height:27px;padding:0 9px}
+  .tb2 tfoot td{padding:8px 9px;font-size:11.5px}
+  /* 紧凑内边距后，箭头槽位同步收窄，表头与内容左边缘仍需吻合 */
+  .tb2 #tb-detail thead th:nth-child(3){padding-left:25px}
+  .tb2 tr.srow td:nth-child(3){padding-left:31px}
+  /* 年度表：选中对时插入分站行，用与明细表一致的层级视觉 */
+  #tb-year tr.ag td{background:rgba(56,189,248,.035);font-weight:640;color:var(--ink);
+    border-bottom:1px solid #17293e}
+  #tb-year tr.sg td{color:#93a8c1;font-weight:400}
+  #tb-year tr.sg td:nth-child(3){padding-left:22px;font-weight:600;color:var(--ink2)}
+  #tb-year tr.sg td:nth-child(3):before{content:"└";color:#3d5570;margin-right:6px}
+
+  /* ---------- 提示 ---------- */
+  .up{color:var(--red)}
+  .dn{color:var(--green)}
+  .warn{margin-top:13px;padding:10px 13px;border-radius:8px;font-size:11.5px;line-height:1.75;
+    background:rgba(255,92,82,.07);border:1px solid rgba(255,92,82,.26);color:#f0a49e}
+  .warn b{color:#ffbdb8}
+  .note{background:rgba(56,189,248,.06);border-color:rgba(56,189,248,.24);color:#9dc9e6}
+  .note b{color:#c9e6f8}
+
+  /* ---------- 历年 ---------- */
+  .yrow{display:flex;align-items:flex-end;gap:20px;flex:1;min-height:172px;padding:6px 4px 0}
+  .ycol{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;
+    align-items:center;gap:7px}
+  .ycol .bar{width:100%;max-width:62px;border-radius:5px 5px 1px 1px;
+    background:linear-gradient(180deg,#4a8fc9,#153a5e);transition:height .55s;
+    box-shadow:0 0 18px -6px rgba(74,143,201,.7)}
+  .ycol .bar.now{background:linear-gradient(180deg,#f0d9a8,#b8934a);
+    box-shadow:0 0 18px -6px rgba(217,184,120,.75)}
+  .ycol .n{font-size:12px;font-weight:660;font-variant-numeric:tabular-nums;color:var(--ink)}
+  .ycol .l{font-size:10.5px;color:var(--sub)}
+  /* 6 个月跨度：每月多两行小字（区间 / 同比），柱间距与字号相应收紧 */
+  #mtrack{gap:14px;padding:6px 2px 0}
+  #mtrack .ycol{gap:4px;justify-content:flex-end}
+  /* 柱子的百分比高度要相对「弹性的柱槽」解析，否则会被下方三行标签挤扁 */
+  #mtrack .bw{flex:1 1 auto;width:100%;min-height:36px;display:flex;
+    flex-direction:column;justify-content:flex-end;align-items:center}
+  #mtrack .bw .bar{flex:none}
+  /* 堆叠段：柴油在底、汽油居中、小额配送在顶；一段一色，柱高仍是当月合计 */
+  #mtrack .bw .bar.stk{display:flex;flex-direction:column-reverse;overflow:hidden;
+    width:100%;max-width:62px;border-radius:5px 5px 1px 1px;background:transparent;
+    box-shadow:0 0 18px -6px rgba(74,143,201,.7);transition:height .55s}
+  #mtrack .bw .bar.stk>i{display:block;width:100%;flex:none;transition:height .55s}
+  #mtrack .bw .bar.stk>i.s1{background:linear-gradient(180deg,#4a9fe0,#1d4d7c)}
+  #mtrack .bw .bar.stk>i.s2{background:linear-gradient(180deg,#f0d9a8,#b8934a)}
+  #mtrack .bw .bar.stk>i.s3{background:linear-gradient(180deg,#647f9c,#3b5069)}
+  #mtrack .bw .bar.stk>i.s3{border-radius:5px 5px 0 0}
+  /* 「未拆分」占位段：源表只有吨量、没有柴汽拆分时用斜纹表示，不臆造比例 */
+  #mtrack .bw .bar.stk>i.s0{background:repeating-linear-gradient(45deg,#3f5670,#3f5670 5px,#2a3b4f 5px,#2a3b4f 10px)}
+  #mtrack .ycol.none .n{color:#41546a;font-weight:560}
+  #mtrack .ycol.none .l i{color:#5d7590}
+  #mtrack .ycol.pick:hover .bar.stk{filter:brightness(1.15)}
+  /* 数值贴在柱顶（放进柱槽内），比吊在卡片顶部更像柱状图 */
+  #mtrack .bw .n{font-size:11.5px;font-weight:660;font-variant-numeric:tabular-nums;
+    color:var(--ink);white-space:nowrap;line-height:1.45}
+  #mtrack .ycol .n{font-size:11.5px}
+  #mtrack .ycol .l{font-size:11px;font-weight:600;color:var(--ink2);line-height:1.25}
+  #mtrack .ycol .l i{font-style:normal;font-size:8.5px;color:var(--gold);
+    font-weight:500;margin-left:2px;vertical-align:1px}
+  #mtrack .ycol .lr{font-size:9px;color:#5d7590;letter-spacing:-.15px;white-space:nowrap}
+  #mtrack .ycol .ya{font-size:9.5px;font-weight:640;font-variant-numeric:tabular-nums}
+  #mtrack .ycol .ya.flat{color:#4d6480}
+  #mtrack .ycol.pick{cursor:pointer}
+  #mtrack .ycol.pick:hover .bar{filter:brightness(1.22);
+    box-shadow:0 0 22px -4px rgba(74,168,232,.9)}
+  #mtrack .ycol.pick:hover .l{color:#fff}
+  #mtrack .ycol.cur .n{color:var(--gold2)}
+  #mtrack .ycol.cur .bar{box-shadow:0 0 22px -6px rgba(217,184,120,.85)}
+  /* ---------- 轨迹柱的明细浮层 ----------
+     原生 title 只能给一行纯文本、等 1 秒才出、样式不可控，看不出占比。
+     这里改成卡片式浮层：总量 + 柴/汽/小额 各自数值与占比 + 天数/日均/同比。
+     浮层宽度固定 206px，首尾两根柱子贴边对齐，中间居中 —— 不撑破卡片。 */
+  #mtrack .ycol{position:relative}
+  #mtrack .mtip{position:absolute;bottom:calc(100% - 4px);left:50%;
+    transform:translateX(-50%);width:206px;box-sizing:border-box;
+    background:#0b1622;border:1px solid #2b4a6b;border-radius:8px;
+    padding:9px 11px 8px;z-index:220;opacity:0;visibility:hidden;
+    pointer-events:none;transition:opacity .14s,visibility .14s;
+    box-shadow:0 16px 38px -12px rgba(0,0,0,.95),0 0 0 1px rgba(56,189,248,.10)}
+  #mtrack .ycol:hover .mtip{opacity:1;visibility:visible}
+  #mtrack .ycol:hover{z-index:230}
+  /* 页面滚到图表贴顶时，柱顶上方只剩几十像素 —— 浮层默认向上弹会被视口顶边裁掉。
+     mouseover 时量一次：上方不够高就加 .flip，改挂到柱顶内侧往下展开（柱子最高 296px，容得下）。 */
+  #mtrack .mtip.flip{bottom:auto;top:3px}
+  #mtrack .ycol:nth-child(-n+2) .mtip{left:0;transform:none}
+  #mtrack .ycol:nth-last-child(-n+2) .mtip{left:auto;right:0;transform:none}
+  #mtrack .mt-h{display:flex;justify-content:space-between;align-items:baseline;
+    gap:8px;font-size:10px;color:var(--sub);margin-bottom:4px}
+  #mtrack .mt-h b{color:var(--ink);font-size:11px;font-weight:640}
+  #mtrack .mt-tot{font-size:19px;font-weight:700;color:#fff;line-height:1.1;
+    font-variant-numeric:tabular-nums;margin-bottom:7px}
+  #mtrack .mt-tot small{font-size:10px;font-weight:500;color:var(--sub);margin-left:3px}
+  #mtrack .mt-r{display:flex;align-items:center;gap:6px;font-size:10.5px;line-height:1.85}
+  #mtrack .mt-r i{width:7px;height:7px;border-radius:2px;flex:none}
+  #mtrack .mt-r i.c1{background:linear-gradient(180deg,#4a9fe0,#1d4d7c)}
+  #mtrack .mt-r i.c2{background:linear-gradient(180deg,#f0d9a8,#b8934a)}
+  #mtrack .mt-r i.c3{background:linear-gradient(180deg,#647f9c,#3b5069)}
+  #mtrack .mt-r i.c0{background:repeating-linear-gradient(45deg,#3f5670,#3f5670 2px,#2a3b4f 2px,#2a3b4f 4px)}
+  #mtrack .mt-r span{flex:1 1 auto;min-width:0;color:var(--ink2);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #mtrack .mt-r b{color:#fff;font-weight:640;font-variant-numeric:tabular-nums;flex:none}
+  #mtrack .mt-r em{font-style:normal;color:var(--gold2);font-weight:600;flex:none;
+    width:37px;text-align:right;font-variant-numeric:tabular-nums}
+  #mtrack .mt-f{margin-top:6px;padding-top:5px;border-top:1px solid #1b3049;
+    font-size:9.5px;color:var(--sub);line-height:1.55}
+  /* 占比条：把三段的百分比画成一条按比例分段的小色条，
+     「谁占大头」不用读数字也能看出来。flex 权重直接吃吨数，天然成比例。 */
+  #mtrack .mt-pt{display:flex;height:5px;border-radius:3px;overflow:hidden;
+    gap:1.5px;margin:7px 0 8px;background:#132434}
+  #mtrack .mt-pt>i{display:block;height:100%;min-width:2px}
+  #mtrack .mt-pt>i.c1{background:linear-gradient(90deg,#4a9fe0,#2a6ea8)}
+  #mtrack .mt-pt>i.c2{background:linear-gradient(90deg,#f0d9a8,#c09a52)}
+  #mtrack .mt-pt>i.c3{background:linear-gradient(90deg,#6b86a2,#41566d)}
+  #mtrack .mt-none{margin-top:2px;font-size:10.5px;color:#5d7590}
+  .mtbl{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:2px}
+  .mtbl th,.mtbl td{padding:6px 9px;text-align:right;border-bottom:1px solid #12202f}
+  .mtbl th:first-child,.mtbl td:first-child{text-align:left;color:var(--sub)}
+  .mtbl th{font-size:10px;color:var(--sub);background:#0a1521;position:static;font-weight:600}
+  .mtbl td.now{font-weight:640;color:var(--gold);background:rgba(217,184,120,.06)}
+
+  /* 口径说明：6 条结构化定义，替代原先挤在页脚的一大段混合文字 */
+  .spec{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px 26px}
+  .spec .sp{font-size:11px;line-height:1.9;color:var(--sub)}
+  .spec .sp b{display:block;color:var(--ink2);font-size:11.5px;font-weight:660;
+    margin-bottom:5px;letter-spacing:.2px}
+  .spec .sp strong{color:#e8cf95;font-weight:640}
+  .spec .sp code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;
+    background:rgba(56,189,248,.1);padding:1px 5px;border-radius:4px;color:#a8cbe6}
+  @media (max-width:1100px){ .spec{grid-template-columns:repeat(2,minmax(0,1fr))} }
+  @media (max-width:760px){ .spec{grid-template-columns:1fr} }
+
+  footer{margin-top:18px;padding-top:15px;border-top:1px solid var(--line);
+    display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap;
+    font-size:10.5px;line-height:1.85;color:#63788f}
+  footer .credit{color:#54697f}
+
+  /* ---------- 滚动条 ---------- */
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:#1e3348;border-radius:6px}
+  ::-webkit-scrollbar-thumb:hover{background:#2a4864}
+
+  @media (max-width:1180px){
+    .cust,.ygrid{grid-template-columns:1fr;gap:20px}
+  }
+
+  /* ---------- 响应式 ---------- */
+  /* 5 列 KPI：单格变窄，长数字（105,239.2）需逐级收字号，否则 nowrap 会被裁 */
+  @media (max-width:1560px){ .kpi .v{font-size:27px} }
+  @media (max-width:1320px){ .kpi .v{font-size:23px;letter-spacing:-.6px} }
+  @media (max-width:1280px){
+    .s4,.s8{grid-column:span 12}
+    /* 半宽下两表列数偏密，1280 以下回归单列，靠限高滚动控制高度 */
+    .tb2{grid-template-columns:1fr}
+  }
+  @media (max-width:1000px){
+    .wrap{padding:0 12px 30px}
+    .mark{height:46px}
+    .mark img{height:46px}
+    .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .kpi .v{font-size:28px;letter-spacing:-.8px}
+    /* 5 个卡在 2 列下会剩单个，让它占满整行，不留半格空洞 */
+    .kpi:nth-child(odd):before{display:none}
+    .kpi:nth-child(5){grid-column:span 2}
+    .s6{grid-column:span 12}
+    /* 7 项月度信息带在 1000 以下挤成一行会互相压字，改 3 列换行 */
+    .mkpi{flex-wrap:wrap}
+    .mkpi .mi{flex:1 1 33.33%;border-bottom:1px solid var(--line2)}
+    .mkpi .mi+.mi:before{display:none}
+    .vnote{flex:1 0 100%;margin-left:0;padding-top:6px;border-top:1px dashed var(--line2)}
+  }
+  @media (max-width:640px){
+    .kpis{grid-template-columns:1fr}
+    .kpi:nth-child(5){grid-column:auto}
+    .kpi .t{min-height:0}   /* 单列不需要等高对齐，去掉会留大段空白 */
+    .kpi:before{display:none}
+    .donut-wrap{flex-direction:column;align-items:stretch}
+    .donut{margin:0 auto}
+    h1{font-size:16px}
+    .mark{height:36px}
+    .mark img{height:36px}
+    .mkpi{flex-wrap:wrap}
+    .mkpi .mi{flex:1 1 45%}
+    /* 窄屏不要把列压窄：给表一个下限宽度，靠横向滚动而不是换行挤压 */
+    #tb-detail{min-width:720px}
+    #tb-year{min-width:680px}
+    /* 手机上两表已堆叠，限高再收一档，避免一屏只剩一张表 */
+    .tb2 .tbl-wrap{max-height:330px}
+    /* 切换 chips 在窄屏铺满整行，点按目标足够大 */
+    .pbar{padding:9px 11px}
+    .plabel{flex:1 0 100%}
+    .pchip{padding:5px 11px}
+    /* 卡片头部与按钮组换行排布，按钮不被压成竖排单字 */
+    .h{flex-wrap:wrap;row-gap:9px}
+    /* 副标题在窄屏必须能折行：口径说明越来越长（月/天数/路段数/是否含小额），
+       nowrap 会把整张卡撑到 600px+，375 档直接横向溢出 */
+    .h>span{white-space:normal;text-align:left;flex:1 0 100%;overflow:visible;text-overflow:clip;line-height:1.45}
+    /* 控件 + 说明在窄屏单独占一行：下拉靠左、说明靠右，避免两者互挤 */
+    .hright{flex:1 0 100%;justify-content:space-between;margin-top:2px;gap:7px}
+    .hright>#roads-span{flex:1 1 auto;text-align:right;white-space:normal;line-height:1.4}
+    /* 窄屏把名字列收窄、数值列放宽：路段名最多 3 字，数值要放得下「30,742.7 29.2%」。
+       只作用于 #roads —— .bl 同时被大客户/渠道复用，那些名字更长，不能一起收窄 */
+    #roads .bl{grid-template-columns:74px 1fr 96px;gap:9px;font-size:12px}
+    .tbtns{flex-wrap:wrap;row-gap:6px}
+    .tbtn,.seg button{flex:none;white-space:nowrap}
+    /* 柱间太窄时柱顶数字会连片，改由悬浮/点按提示承载 */
+    .col .bv{display:none}
+  }
+  /* ---------- 动效与交互 ---------- */
+  @keyframes growX{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+  @keyframes growY{from{transform:scaleY(.02);opacity:.35}to{transform:scaleY(1);opacity:1}}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+  @keyframes ringIn{from{opacity:0;transform:scale(.86)}to{opacity:1;transform:none}}
+
+  .bl .fl{transform-origin:left center;
+    animation:growX .78s cubic-bezier(.22,1,.36,1) both;
+    animation-delay:calc(var(--i,0) * 46ms)}
+  .pb .sr .fl{animation-duration:.5s;animation-delay:0ms}
+  .col .bar,.ycol .bar{transform-origin:center bottom;
+    animation:growY .72s cubic-bezier(.22,1,.36,1) both;
+    animation-delay:calc(var(--i,0) * 32ms)}
+  .donut{animation:ringIn .6s cubic-bezier(.22,1,.36,1) both}
+  .kpi{animation:fadeUp .5s cubic-bezier(.22,1,.36,1) both;
+    animation-delay:calc(var(--i,0) * 70ms)}
+  .ycol{animation:fadeUp .45s cubic-bezier(.22,1,.36,1) both;
+    animation-delay:calc(var(--i,0) * 34ms)}
+
+  /* 悬停：高亮 + 发光 + 微位移 */
+  .bl{transition:background .18s ease,transform .18s ease}
+  .bl:hover{transform:translateX(3px)}
+  .bl:hover .nm{color:#eaf4ff}
+  .bl:hover .fl{filter:brightness(1.25) saturate(1.12);
+    box-shadow:0 0 18px -1px rgba(74,168,232,.85)}
+  .bl.top:hover .fl{box-shadow:0 0 18px -1px rgba(217,184,120,.9)}
+  .col{transition:transform .16s ease}
+  .col:hover{transform:translateY(-2px)}
+  .col:hover .bar{filter:brightness(1.28) saturate(1.1);
+    box-shadow:0 0 18px rgba(74,168,232,.6)}
+  .ycol .bar{transition:filter .18s ease,box-shadow .18s ease}
+  .ycol .bar:hover{filter:brightness(1.2);box-shadow:0 0 20px rgba(74,168,232,.55)}
+
+  /* 柱体顶部高光 */
+  .col .bar:after{content:"";position:absolute;inset:0;border-radius:inherit;
+    background:linear-gradient(180deg,rgba(255,255,255,.3),transparent 44%);
+    opacity:.6;pointer-events:none}
+
+  /* 科技感：卡片顶部光边 + 悬浮响应 */
+  .card:not(.kpis):before{content:"";position:absolute;top:0;left:16px;right:16px;height:1px;
+    background:linear-gradient(90deg,transparent,rgba(74,168,232,.6),rgba(217,184,120,.45),transparent);
+    opacity:.75;pointer-events:none}
+  .card{transition:border-color .22s ease,box-shadow .22s ease}
+  .card:not(.kpis):hover{border-color:rgba(74,168,232,.34);
+    box-shadow:0 0 0 1px rgba(74,168,232,.1),0 16px 44px -26px rgba(74,168,232,.55)}
+  .cols.few{justify-content:center;gap:34px}
+  .cols.few .col{max-width:92px}
+  .cols.few .col .bar{max-width:52px}
+
+  .mtbl th.his,.mtbl td.his{color:#6b7f97}
+  .mtbl th.his{font-weight:500}
+
+  @media (prefers-reduced-motion:reduce){
+    .bl .fl,.col .bar,.ycol .bar,.donut,.kpi{animation:none!important}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <div class="brand">
+      <div class="mark"><img src="brand.png" alt="陕西交控 · 延长石油"></div>
+      <div>
+        <h1>成品油销售数据驾驶舱</h1>
+        <div class="sub">陕西省高速公路服务区 · 15 对 / 30 座加油站 · 月度＝会计月（26 日→次月 25 日）· 年度累计＝日报逐月累加＋当月实时</div>
+      </div>
+    </div>
+    <div class="chips">
+      <div class="seg" id="scp">
+        <button data-s="full" class="on">全口径</button>
+        <button data-s="retail">仅零售</button>
+      </div>
+      <div class="seg" id="seg">
+        <button data-tax="1" class="on">含税</button>
+        <button data-tax="0">不含税</button>
+      </div>
+      <div class="chip">更新 <b id="c-gen"></b></div>
+    </div>
+  </div>
+
+  <!-- 视角层（L1）：全公司 ↔ 单站（= 一对）。切换在页顶，同时决定下面所有模块的取数范围 -->
+  <div class="vbar" id="vbar">
+    <div class="vrow">
+      <div class="seg" id="vseg">
+        <button data-v="co" class="on">全公司视角</button>
+        <button data-v="pair">单站视角</button>
+      </div>
+      <div class="vscope" id="vscope"></div>
+    </div>
+    <div class="pchips" id="pchips"></div>
+  </div>
+
+  <div class="card kpis six" id="kpis"></div>
+
+  <div class="card mkpi" id="mkpi"></div>
+
+  <!-- 单站消费结构：只在单站视角出现，替代公司级的「大客户构成」（后者无站级归属） -->
+  <div class="g12" id="vgrid" style="display:none">
+    <div class="card s12">
+      <div class="h"><h2 id="vcard-t">单站消费结构</h2><span id="vcard-span"></span></div>
+      <div class="vstruct" id="vcard"></div>
+    </div>
+  </div>
+
+  <div class="g12">
+    <div class="card s12">
+      <div class="h"><h2 id="trend-t">日销量走势</h2>
+        <div class="tbtns" id="winbtns">
+          <span id="trend-span" style="font-size:10.5px;color:var(--sub);margin-right:6px"></span>
+          <button class="tbtn on" data-w="30">近 30 天</button>
+          <button class="tbtn" data-w="45">近 45 天</button>
+          <button class="tbtn" data-w="60">近 60 天</button>
+        </div></div>
+      <div class="pdbar" id="pdbar"></div>
+      <div class="cols" id="cols"></div>
+      <div class="legend" style="display:flex;gap:16px;font-size:10.5px;color:var(--sub);margin-top:12px">
+        <span><i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:linear-gradient(180deg,#3f8fd0,#1d4d7c);margin-right:6px;vertical-align:-1px"></i>柴油</span>
+        <span><i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:linear-gradient(180deg,#f0d9a8,#b8934a);margin-right:6px;vertical-align:-1px"></i>汽油</span>
+        <span><i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#4a6382;margin-right:6px;vertical-align:-1px"></i>小额配送（切全口径时显示）</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="g12">
+    <div class="card s6">
+      <div class="h"><h2>会计月轨迹</h2><span id="mtrack-span">近六个月 · 吨 · 点柱子切换会计月</span></div>
+      <div class="yrow" id="mtrack" style="height:196px"></div>
+      <div class="note warn" id="mtrack-note" style="margin-top:14px"></div>
+    </div>
+    <div class="card s6">
+      <div class="h"><h2>站点排行</h2><span id="sttop-span">点击展开东西 / 南北分站</span></div>
+      <div class="bars" id="sttop"></div>
+    </div>
+  </div>
+
+  <div class="g12">
+    <div class="card s6">
+      <div class="h"><h2>路段结构</h2>
+        <div class="hright">
+          <select id="rdsel" class="rdsel" title="切换全年累计或单个会计月"></select>
+          <span id="roads-span">全年累计</span>
+        </div>
+      </div>
+      <div class="bars" id="roads"></div>
+    </div>
+    <div class="card s6">
+      <div class="h"><h2>收款渠道</h2><span>按销量占比</span></div>
+      <div class="donut-wrap">
+        <div class="donut"><svg viewBox="0 0 42 42" id="donut"></svg>
+          <div class="ctr"><b id="d-v"></b><span>本月销量 吨</span></div>
+        </div>
+        <div class="clist" id="chs"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="g12" id="custgrid">
+    <div class="card s12">
+      <div class="h"><h2>大客户构成</h2><span>主图客户 · 副图渠道 · 公司级口径</span></div>
+      <div class="cust">
+        <div class="donut-wrap">
+          <div class="donut"><svg viewBox="0 0 42 42" id="cdonut"></svg>
+            <div class="ctr"><b id="cd-v"></b><span>大客户量 吨</span></div>
+          </div>
+          <div class="clist" id="cls"></div>
+        </div>
+        <div class="cmp">
+          <div class="ttl">副图 · 大客户渠道在全口径中的位置</div>
+          <div id="cmp"></div>
+          <div class="ttl" id="cmp-t" style="margin:10px 0 0"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 按对切换条已上移到页顶 #vbar：视角决定范围，下面两张表跟随同一选中态 -->
+  <div class="g12 tb2">
+    <div class="card">
+      <div class="h"><h2>15 对 + 小额 · 30 站明细</h2>
+        <div class="tbtns"><span id="tbl-hint" style="font-size:10.5px;color:var(--sub)"></span>
+          <button class="tbtn" id="btn-all">全部展开</button></div></div>
+      <div class="tbl-wrap">
+        <table id="tb-detail">
+          <colgroup>
+            <col style="width:5%"><col style="width:7%"><col style="width:20%">
+            <col style="width:10%"><col style="width:7%"><col style="width:9%">
+            <col style="width:9%"><col style="width:8%"><col style="width:12%"><col style="width:13%">
+          </colgroup>
+          <thead><tr>
+            <th>排位</th><th>路段</th><th>站点对 / 分站</th><th>销量(吨)</th><th>占比</th>
+            <th>柴油</th><th>汽油</th><th>柴汽比</th><th id="th-amt">含税(万元)</th><th id="th-price">吨均价</th>
+          </tr></thead>
+          <tbody id="tb"></tbody>
+          <tfoot id="tb-tf"></tfoot>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="h"><h2>各站年度销量（按对）</h2>
+        <div class="tbtns"><span id="pann-hint" style="font-size:10.5px;color:var(--sub)"></span></div></div>
+      <div class="tbl-wrap">
+        <table id="tb-year">
+          <colgroup>
+            <col style="width:6%"><col style="width:8%"><col style="width:21%">
+            <col style="width:11%"><col style="width:11%"><col style="width:11%"><col style="width:12%">
+            <col style="width:10%"><col style="width:10%">
+          </colgroup>
+          <thead><tr>
+            <th>排位</th><th>路段</th><th>站点对 / 分站</th>
+            <th>2023</th><th>2024</th><th>2025</th><th>2026 <sup style="color:#d9b878">*</sup></th>
+            <th>2025 比 2024</th><th>四年累计</th>
+          </tr></thead>
+          <tbody id="pann-tb"></tbody>
+          <tfoot id="pann-tf"></tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="warn note" id="pann-note" style="margin:-2px 0 12px"></div>
+
+  <div class="g12">
+    <div class="card s12">
+      <div class="h"><h2>历年销量对比</h2><span id="y-span"></span></div>
+      <div class="ygrid">
+        <div>
+          <div class="yrow" id="ytrack" style="height:176px"></div>
+          <div class="warn note" id="ynote" style="margin-top:14px"></div>
+        </div>
+        <div>
+          <div style="font-size:10.5px;color:var(--sub);margin-bottom:8px">各月销量对比（吨）与同比</div>
+          <div style="max-height:372px;overflow:auto">
+            <table class="mtbl" id="ytbl"></table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 口径说明：全站唯一的口径定义处。其它卡片只负责给数字，不再各写一段解释 -->
+  <div class="g12">
+    <div class="card s12">
+      <div class="h"><h2>口径说明</h2><span>全站唯一的定义处 · 上方所有卡片的数字都按这里解释</span></div>
+      <div class="spec">
+        <div class="sp"><b>① 销量</b>
+          取「销售日报」<code>当日销量（吨）</code> 日块逐站累加。柴油 = −10# + 0#，
+          汽油 = 92# + 95#。日块与「月销售累计」偶有录入差（如 202402 差 207 吨），
+          全站一律以日块为准，保证年度图 / 月份表 / 站表三处同源。</div>
+        <div class="sp"><b>② 小额配送</b>
+          源表里是 A 列独立一行、B 列为空，<strong>没有站级归属</strong>。
+          本平台把它当作<strong>第 16 个虚拟实体</strong>（「公司级」），与 15 对平权：
+          独立成行、可下钻、可拆柴汽、可比同比。11 张渠道表无小额行 → 不展示其渠道结构，宁缺不造数。</div>
+        <div class="sp"><b>③ 口径开关</b>
+          页顶 <code>全口径 / 仅零售</code> 只影响「是否把小额配送计入总量」；
+          <code>含税 / 不含税</code> 只影响金额列。两者互相独立，任何视角下都可切换，
+          单站视角同样可切（该站本身不含小额，切的是与公司基准对比时的分母）。</div>
+        <div class="sp"><b>④ 金额</b>
+          含税取日块 <code>当日销售额（元）</code>，不含税取 <code>当日销售收入（万元）</code>，
+          均在站级累加后折万元。小额金额同样走日块，不再取「月销售累计」列
+          —— 后者是月报链口径（含批发），2026 年比日块多 1.56 亿元，混用会让全口径产值虚高。</div>
+        <div class="sp"><b>⑤ 同比</b>
+          分母 = 去年 1–10 会计月整月 + 去年同会计月「与今年同样已填的那几天」。
+          去年同期金额按同期吨量占整月比例折算（源表只有整月金额）。
+          11 月分品类产值按当月柴/汽吨量占比拆分（源表当月未拆）。</div>
+        <div class="sp"><b>⑥ 历史差异</b>
+          会计月 = 每月 26 日 → 次月 25 日，文件名月份是<strong>止月</strong>
+          （<code>202608</code> = 7/26–8/25）。2023 年无日报文件，只能用公司台账
+          （自然月、零售口径），与 2024 起存在口径差；2025 年零售金额列源表为 <code>#REF!</code>，
+          金额同比只对含税口径可信。原表全程只读，驾驶舱不回写任何文件。</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div>
+      数据源：<code>D:\成品油销量\日报20xx\</code> 34 个月报（2024-01 ~ 2026-10）+ 当月 kdocs 实时填报。
+      口径定义见上方「口径说明」，本页不再重复。
+    </div>
+    <div class="credit">Design by 刘龙伟 · Email: liulongwei@126.com</div>
+  </footer>
+
+</div>
+
+<script>
+const D = __PAYLOAD__;
+const $ = s => document.querySelector(s);
+const n = v => (v || 0).toLocaleString('zh-CN', {maximumFractionDigits: 1});
+const PAL = ['#3f8fd0','#d9b878','#5bc0eb','#2fd39b','#9b7ede','#7e91a9','#f0788e','#4aa8e8'];
+
+/* 线性图标（Lucide 风，24 格） */
+const _svg = d => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+const ICON = {
+  drop: _svg('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5S12.5 5 12 2.5C11.5 5 10 7.5 8 9.5S5 13 5 15a7 7 0 0 0 7 7z"/>'),
+  cash: _svg('<rect x="2" y="6" width="20" height="12" rx="2.5"/><circle cx="12" cy="12" r="2.4"/><path d="M6 12h.01M18 12h.01"/>'),
+  receipt: _svg('<path d="M5 21V4.5A1.5 1.5 0 0 1 6.5 3h11A1.5 1.5 0 0 1 19 4.5V21l-2.3-1.5-2.35 1.5L12 19.5 9.65 21 7.3 19.5 5 21z"/><path d="M9 8h6M9 12h6"/>'),
+  users: _svg('<path d="M16 20v-1.6a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V20"/><circle cx="9" cy="7" r="3.4"/><path d="M22 20v-1.6a4 4 0 0 0-3-3.87M16 3.6a4 4 0 0 1 0 7.75"/>'),
+  tag: _svg('<path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4z"/><circle cx="7.5" cy="7.5" r="1"/>'),
+  pin: _svg('<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/>'),
+  oil: _svg('<path d="M3 21V8l5-3 5 3v13"/><path d="M3 21h12M13 12h5a3 3 0 0 1 3 3v6"/><path d="M7 12h3"/>'),
+  fuel: _svg('<path d="M4 21V5a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v16"/><path d="M2 21h13"/><path d="M13 9h3a2 2 0 0 1 2 2v6a2 2 0 0 0 4 0V9l-3-3"/><path d="M6 8h5"/>'),
+  trend: _svg('<path d="M3 17l6-6 4 4 8-8"/><path d="M21 7h-5M21 7v5"/>')
+};
+/* 口径默认全口径：小额配送已是独立实体，默认纳入才能与「公司总账」对上；
+   想看纯零售就把 #scp 切到「仅零售」。 */
+let TAX = 1, SCP = 'full', WIN = 30, MK = D.meta.month_order[0];
+/* 路段结构的观察窗口：'' = 全年累计（默认），'1'..'11' = 该会计月。
+   与 MK（会计月轨迹当前选中月）相互独立 —— 那个管「本月信息带 / 明细表」，
+   这个只管路段这一张图，两者不必联动（用户常想全年看分布、单月看波动）。 */
+let RDSEL = '';
+const XIAO_NAME = (D.yearly && D.yearly.xiao && D.yearly.xiao.name) || '小额配送';
+const tv = m => SCP === 'full' ? m.ft : m.t;
+const CUR_Y = +(D.meta.month_order[0] || '2026-11').slice(0, 4);
+const LIVE_M = +((D.meta.month_order[0] || '2026-11').split('-')[1]);
+
+$('#c-gen').textContent = D.meta.generated;
+
+/* ========== 视角层（L1）= 全公司 / 单站（= 一对） ==========
+   两种视角共用「同一份 payload 结构 + 同一套渲染分支」，只有一个开关：PSEL。
+   PSEL 为空 → 全公司视角；PSEL 有值 → 单站视角（一个服务区，东西/南北两站合计）。
+   分站级不是独立视角：它的数据只作为单站视角内部的拆解行出现。 */
+const VIEWS = () => (D.yearly && D.yearly.views) || {};
+const isPair = () => !!(PSEL && VIEWS().pairs && VIEWS().pairs[PSEL]);
+const scope = () => (isPair() ? VIEWS().pairs[PSEL] : VIEWS().company) || null;
+const acctRange = m => `${m === 1 ? CUR_Y - 1 : CUR_Y}/${(m - 1) || 12}–${CUR_Y}/${m}`;
+const pctTxt = v => (v === null || v === undefined) ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`;
+const pctCls = v => (v === null || v === undefined) ? 'flat' : (v >= 0 ? 'up' : 'dn');
+const pctEm = v => `<em class="${pctCls(v)}" style="font-style:normal;font-weight:640">${pctTxt(v)}</em>`;
+
+/* ========== 按对切换 ==========
+   交互照搬非油驾驶舱「车流与转化·单数统计」的 chips 逻辑：
+   一个全局选中态，chips 行「全部 + 各站」，点选后所有关联表同步重绘、选中项高亮。
+   成品油的天然层级是「15 对 → 30 站」，此处切换粒度只到「对」：
+   选中某对后，两张表都只留该对，并把它下辖的东/西站作为明细行一并展开。 */
+let PSEL = null, CURM = null, CURP = null, PCOLL = false;
+const POPEN = new Set();          // 全部视角下哪些对处于展开态
+
+function pairList() {
+  const pa = D.yearly.pair_annual || {}, rd = D.yearly.pair_road || {};
+  const ps = D.yearly.pair_stations_all || D.yearly.pair_stations || {};
+  return Object.keys(pa).map(k => ({
+    name: k, road: rd[k] || '',
+    t26: (pa[k] || {})['2026'] || 0,
+    st: ps[k] || [],
+    virtual: k === XIAO_NAME
+  })).sort((a, b) => b.t26 - a.t26);
+}
+
+function syncPchips() {
+  const list = pairList(), box = $('#pchips');
+  const nP = list.filter(p => !p.virtual).length;
+  const nSt = list.reduce((a, p) => a + p.st.length, 0);
+  box.innerHTML = `<span class="plabel">视角<span>范围</span></span>`
+    + `<span class="pchip${PSEL ? '' : ' on'}" data-p="">全部 ${nP} 对 + 小额（${nSt} 站）</span>`
+    + list.map(p => `<span class="pchip${PSEL === p.name ? ' on' : ''}${p.virtual ? ' vx' : ''}"
+        data-p="${p.name}">${p.name}</span>`).join('');
+  box.querySelectorAll('.pchip').forEach(c => c.onclick = () => pickScope(c.dataset.p || null));
+  syncScopeBar();
+}
+
+/* 切换作用域：全公司 ↔ 单站。KPI / 轨迹 / 走势 / 结构 / 两张表全部跟随，
+   绝不允许「表变了而 KPI 没变」这种半截状态，所以统一走一次完整 render()。
+   口径（全口径 / 仅零售）不再随视角强制切换 —— 小额配送已是独立实体，
+   任何视角下都能自由切换，两件事彻底解耦。 */
+function pickScope(name) {
+  PSEL = name || null;
+  POPEN.clear(); PCOLL = false;
+  render();
+}
+
+const rankOf = name => {
+  const ps = VIEWS().pairs || {};
+  return Object.keys(ps).sort((a, b) => ps[b].t - ps[a].t).indexOf(name) + 1;
+};
+
+/* 页顶那条「你在看什么」：两种视角用同一行位置说明范围，避免用户不知道自己处在哪一层 */
+function syncScopeBar() {
+  const V = VIEWS(), p = isPair() ? V.pairs[PSEL] : V.company;
+  document.querySelectorAll('#vseg button').forEach(b =>
+    b.classList.toggle('on', (b.dataset.v === 'pair') === !!PSEL));
+  const el = $('#vscope');
+  if (!el) return;
+  if (PSEL && p) {
+    const isV = PSEL === XIAO_NAME;
+    el.innerHTML = `<b>${p.name}</b><span class="vtag">${isV ? '独立实体' : '单站'}</span>`
+      + `<span class="vsep">·</span><span class="vs">${isV ? '公司级 · 无站级归属' : (p.road || '—') + '高速'}</span>`
+      + `<span class="vsep">·</span><span class="vx">${isV ? '源表 A 列独立行，单独核算'
+        : (p.stations || []).join(' + ')}</span>`
+      + `<span class="vsep">·</span><span class="vx">占公司 ${p.share.toFixed(2)}% · 排名 ${rankOf(PSEL)} / ${Object.keys(V.pairs).length}</span>`;
+  } else if (V.company) {
+    const nP = Object.keys(V.pairs || {}).filter(k => k !== XIAO_NAME).length;
+    const nSt = Object.keys(V.pairs || {}).filter(k => k !== XIAO_NAME)
+      .reduce((a, k) => a + (V.pairs[k].n_st || 0), 0);
+    el.innerHTML = `<b>全公司</b><span class="vtag">全口径</span>`
+      + `<span class="vsep">·</span><span class="vs">${nP} 对 · ${nSt} 站</span>`
+      + `<span class="vsep">·</span><span class="vx">+ ${XIAO_NAME}（公司级虚拟实体）</span>`
+      + `<span class="vsep">·</span><span class="vx">点站对或排行条「站›」下钻</span>`;
+  }
+}
+
+function refreshTables() {
+  syncPchips();
+  detailTable();
+  pairAnnual();
+}
+
+/* 明细表：全部视角看 15 对（可逐对展开）；选定对后只留该对并自动展开其分站 */
+function detailTable() {
+  const m = CURM, pairs = CURP || [];
+  if (!m) return;
+  let h = '';
+  pairs.forEach((p, i) => {
+    if (PSEL && p.name !== PSEL) return;
+    const open = PSEL ? !PCOLL : POPEN.has(i);
+    h += `<tr class="prow${open ? ' open' : ''}${p.virtual ? ' vx' : ''}" data-i="${i}">
+      <td><span class="rk ${i < 3 ? 't' + (i + 1) : ''}">${i + 1}</span></td>
+      <td><span class="tag">${p.road}</span></td>
+      <td><span class="cv">▶</span>${p.name}
+        <span class="tag" style="margin-left:6px">${p.virtual ? '公司级' : p.st.length + ' 站'}</span></td>
+      <td>${n(p.t)}</td><td style="color:var(--sub)">${p.share}%</td>
+      <td>${n(p.diesel) || '—'}</td><td>${n(p.gas) || '—'}</td>
+      <td>${p.gas ? (p.diesel / p.gas).toFixed(2) : '—'}</td>
+      <td>${n(TAX ? p.amt : p.wan)}</td><td>${n(TAX ? p.price : p.price0)}</td></tr>`;
+    if (!open) return;
+    p.st.forEach(s => {
+      h += `<tr class="srow">
+        <td></td><td></td>
+        <td>${s.name}</td>
+        <td>${n(s.t)}</td><td style="color:var(--sub)">${s.share}%</td>
+        <td>${n(s.diesel)}</td><td>${n(s.gas)}</td>
+        <td>${s.gas ? (s.diesel / s.gas).toFixed(2) : '—'}</td>
+        <td>${n(TAX ? s.amt : s.wan)}</td><td>${n(TAX ? s.price : s.price0)}</td></tr>`;
+    });
+  });
+  $('#tb').innerHTML = h
+    || `<tr><td colspan="10" style="height:64px;text-align:center;color:var(--sub)">该对本月暂无填报数据</td></tr>`;
+  // 合计行恒为当前口径的全量（含小额时就是公司全口径），筛某对时正好当参照
+  const A = (k) => pairs.reduce((a, p) => a + (p[k] || 0), 0);
+  const tT = A('t'), tD = A('diesel'), tG = A('gas'), tA = A('amt'), tW = A('wan');
+  const tP = TAX ? Math.round(tA * 1e4 / tT) : Math.round(tW * 1e4 / tT);
+  const nReal = pairs.filter(p => !p.virtual).length;
+  const den = SCP === 'full' && m.xt > 0 ? '全口径（含小额）' : '零售';
+  $('#tb-tf').innerHTML = `<tr><td colspan="3">公司${den}合计 ${nReal} 对 / ${m.stations.length} 站${
+      SCP === 'full' && m.xt > 0 ? ' + 小额' : ''}</td>
+      <td>${n(tT)}</td><td style="color:var(--sub)">100%</td>
+      <td>${n(tD)}</td><td>${n(tG)}</td>
+      <td>${tG ? (tD / tG).toFixed(2) : '—'}</td>
+      <td>${n(TAX ? tA : tW)}</td><td>${n(tP)}</td></tr>`;
+  $('#tb').querySelectorAll('.prow').forEach(tr => tr.onclick = () => {
+    const i = +tr.dataset.i;
+    if (PSEL) { PCOLL = !PCOLL; detailTable(); return; }   // 选中对时只切换该对自身的展开
+    POPEN.has(i) ? POPEN.delete(i) : POPEN.add(i);
+    detailTable();
+  });
+  $('#th-amt').textContent = TAX ? '含税(万元)' : '不含税(万元)';
+  $('#th-price').textContent = TAX ? '吨均价(元)' : '吨均价·不含税';
+  $('#tbl-hint').textContent = `${m.name.replace('会计月', '')} · `
+    + (PSEL ? PSEL : `${nReal} 对 / ${m.stations.length} 站${SCP === 'full' && m.xt > 0 ? ' + 小额' : ''}`)
+    + ` · ${TAX ? '含税' : '不含税'}`;
+
+  const btnAll = $('#btn-all');
+  btnAll.style.display = PSEL ? 'none' : '';
+  btnAll.textContent = (pairs.length && POPEN.size === pairs.length) ? '全部收起' : '全部展开';
+  btnAll.onclick = () => {
+    const expand = btnAll.textContent === '全部展开';
+    if (expand) pairs.forEach((p, i) => POPEN.add(i)); else POPEN.clear();
+    detailTable();
+  };
+}
+
+/* 会计月切换交给「会计月轨迹」的柱子：有逐站明细的月份标 pick 可点，其余仅有总量。
+   用事件委托绑一次即可，避免 render() 里重建 DOM 后绑定失效。 */
+/* 明细浮层的上下避让：默认向上弹出（bottom:calc(100% - 4px)）。
+   柱顶离视口顶边装不下「浮层高 + 6px」时，改为从柱顶内侧往下挂，
+   并保证浮层首行不越过视口 6px —— 贴着图表看时也不会被顶边吃掉。 */
+$('#mtrack').addEventListener('mouseover', e => {
+  const col = e.target.closest('.ycol');
+  if (!col) return;
+  const tip = col.querySelector('.mtip');
+  if (!tip) return;
+  const h = tip.offsetHeight || 150;          // visibility:hidden 也有值，只要不是 display:none
+  const top = col.getBoundingClientRect().top;
+  if (top - (h + 6) >= 0) {
+    tip.classList.remove('flip');
+    tip.style.removeProperty('top');
+  } else {
+    tip.classList.add('flip');
+    tip.style.top = Math.max(3, 6 - top) + 'px';
+  }
+});
+$('#mtrack').addEventListener('click', e => {
+  const el = e.target.closest('.ycol.pick');
+  if (!el) return;
+  const k = el.dataset.k;
+  if (!k || MK === k) return;
+  MK = k;
+  /* 路段图停在「全年」时保持全年不动（那是刻意选的观察窗口）；
+     已经切到某个月时才跟着走，避免「点了 10 月、路段还停在 9 月」的错位感。 */
+  if (RDSEL) RDSEL = String(+k.split('-')[1]);
+  render();
+});
+document.querySelectorAll('#seg button').forEach(b => b.onclick = () => {
+  if (b.disabled) return;
+  document.querySelectorAll('#seg button').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); TAX = +b.dataset.tax; render();
+});
+/* 视角开关：进单站默认落在 2026 累计第一的「真实对」上（不放小额配送，
+   它是公司级虚拟实体，直接落上去容易误解成一站）；退全公司清空选中态 */
+document.querySelectorAll('#vseg button').forEach(b => b.onclick = () => {
+  if (b.dataset.v === 'co') { pickScope(null); return; }
+  const ps = VIEWS().pairs || {};
+  const top = Object.keys(ps).filter(k => k !== XIAO_NAME)
+    .sort((a, c) => ps[c].t - ps[a].t)[0];
+  pickScope(PSEL || top || null);
+});
+document.querySelectorAll('#scp button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#scp button').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); SCP = b.dataset.s; render();
+});
+document.querySelectorAll('#winbtns button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#winbtns button').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); WIN = +b.dataset.w; render();
+});
+
+/* ---------- KPI ---------- */
+/* ---------- KPI ----------
+   两种视角共用 6 个槽位、同一套骨架，只换标题与取数范围：
+     槽1 累计销量 | 槽2 柴油 | 槽3 汽油 | 槽4 产值 | 槽5 累计同比 | 槽6 近 30 天日销
+   全公司 = 15 对 + 小额配送（全口径）；单站 = 该对（东西/南北合计）。
+   柴/汽在单站视角额外给「产值」：一对站里柴油可能只占两成，
+   只看吨数看不出它到底挣不挣钱。 */
+function kpiCards(defs) {
+  return defs.map(([k2, v, u, t, ic, cls, per], i) => `
+    <div class="kpi" style="--i:${i}">
+      <div class="k">${ICON[ic] || ''}${k2}${per ? `<span class="per">${per}</span>` : ''}</div>
+      <div class="v ${cls || ''}">${v}${u ? `<small>${u}</small>` : ''}</div>
+      <div class="t${ic === 'trend' ? ' tiny' : ''}">${t}</div>
+    </div>`).join('');
+}
+
+function ytdKpi() {
+  const y = D.yearly.ytd;
+  const m0 = y.base_months[0], m1 = y.base_months[y.base_months.length - 1];
+  const per = `${m0}–${m1} 月+实时`;
+  const AM = y.amt || {};
+  const amtYoy = v => (v === null || v === undefined) ? '—'
+    : `<em class="${v >= 0 ? 'up' : 'dn'}" style="font-style:normal;font-weight:640">`
+      + `${v >= 0 ? '+' : ''}${v.toFixed(1)}%</em>`;
+
+  /* ===== 全公司视角 ===== */
+  if (!isPair()) {
+    const c = SCP === 'full' ? y.full : y.retail;
+    const isFull = SCP === 'full';
+    const V = VIEWS().company || {};
+    /* ★ 同比、去年同期、净增、金额同比都必须跟着口径走。
+       原来一律取 y.yoy(3.8%) / y.prev_same(101,396.3)，这两个是纯零售数；
+       口径切到「全口径」时，总量写着 147,643.2（含小额 42,404），同比却还是零售的
+       3.8%，两句话对不上——用户一眼就看出「数据不对」。
+       全口径的去年同期与同比在 views.company 里已算好（104,228.9 吨 / +41.7%）。 */
+    const yv = isFull ? ((V.yoy && V.yoy.t) ?? null) : y.yoy;
+    const prevT = isFull ? ((V.prev && V.prev.t) ?? null) : y.prev_same;
+    const liveTxt = y.live_days ? `${y.live_month} 月已填 ${y.live_days} 天` : `${y.live_month} 月未开始`;
+    const diff = (prevT === null || yv === null) ? null : +(c.t - prevT).toFixed(1);
+    const pv = prevT === null ? '—' : n(prevT);
+    const amtYoyV = isFull ? ((V.yoy && V.yoy.amt) ?? null) : AM.yoy;
+    const yoyTxt = (v, prev) => (v === null || v === undefined)
+      ? '去年同期无分品类数据'
+      : `同比 ${pctEm(v)} · 去年 ${n(prev)} 吨`;
+    /* 柴/汽的占比与同比恒按零售口径：小额配送当月分品类可拆、但去年同月基数极小，
+       混在一起算会把「柴汽结构」压成噪声，故一律以零售为分母并标注。 */
+    const base = y.retail.t;
+    const oilLbl = SCP === 'full' ? '（零售）' : '';
+    const amtVal = SCP === 'full'
+      ? (TAX ? AM.full_tax : AM.full_net)
+      : (TAX ? AM.total_wan : AM.retail_net);
+    const amtNote = SCP === 'full'
+      ? `零售 ${n(TAX ? AM.total_wan : AM.retail_net)} + 小额 ${n(TAX ? AM.xiao_tax : AM.xiao_net)} 万元`
+      : `不含小额配送`;
+    /* 近 30 天滚动窗口同样分口径：daily_win 的 total/avg 是纯零售预计算值，
+       日柱却按口径叠了 xt，故这里一律用日柱重算（全口径 15,011.6 / 仅零售 12,246.2）。 */
+    const w30 = (D.daily_win && D.daily_win['30']) || { days: [] };
+    const ds = w30.days || [];
+    const _vt = d => (d.t || 0) + (isFull ? (d.xt || 0) : 0);
+    const wTot = ds.reduce((a, d) => a + _vt(d), 0);
+    const wAvg = ds.length ? wTot / ds.length : 0;
+    const wPeak = Math.max(...ds.map(_vt), 0);
+    return kpiCards([
+      ['全年累计销量', n(c.t), '吨',
+       `截至 ${y.as_of || '—'} · ${m0}–${m1} 月 + ${liveTxt}`, 'drop', '', per],
+      ['柴油累计', n(c.diesel), '吨',
+       `占 ${(c.diesel / base * 100).toFixed(1)}%${oilLbl} · ${yoyTxt(y.yoy_d, y.prev_diesel)}`, 'oil', ''],
+      ['汽油累计', n(c.gas), '吨',
+       `占 ${(c.gas / base * 100).toFixed(1)}%${oilLbl} · ${yoyTxt(y.yoy_g, y.prev_gas)}`, 'fuel', ''],
+      ['产值金额', n(amtVal), '万元', `${amtNote} · 同比 ${amtYoy(amtYoyV)}`, 'cash', ''],
+      ['累计销量同比', pctTxt(yv), '',
+       `${y.prev} 年同期 ${pv} 吨 · 净增 ${diff === null ? '—' : (diff >= 0 ? '+' : '') + n(diff)} 吨`,
+       'trend', yv === null ? '' : (yv >= 0 ? 'hl-up' : 'hl-dn')],
+      ['近 30 天日销', n(wAvg), '吨/日',
+       `合计 ${n(wTot)} 吨 · 峰值 ${n(wPeak)} · 在营 `
+       + `${ds.filter(d => (d.t || 0) + (isFull ? (d.xt || 0) : 0) > 0).length}/${ds.length} 天`, 'tag', '']
+    ]);
+  }
+
+  /* ===== 单站视角（= 一对，或「小额配送」这个虚拟实体） ===== */
+  const p = scope(), yy = p.yoy || {}, pv = p.prev || {}, co = VIEWS().company;
+  const aAmt = TAX ? p.amt : p.wan;
+  const dAmt = TAX ? p.damt : p.dwan;
+  const gAmt = TAX ? p.gamt : p.gwan;
+  const li = v => aAmt > 0 ? (v / aAmt * 100).toFixed(1) + '%' : '—';
+  const w30 = (p.daily || []).slice(-30);
+  const pAvg = w30.length ? w30.reduce((a, x) => a + x.t, 0) / w30.length : 0;
+  return kpiCards([
+    ['全年累计销量', n(p.t), '吨',
+     `占公司 ${(p.t / (co.t || 1) * 100).toFixed(2)}% · 排名 ${rankOf(PSEL)} / `
+     + `${Object.keys(VIEWS().pairs).length} · 截至 ${y.as_of || '—'}`, 'drop', '', per],
+    ['柴油累计', n(p.diesel), '吨',
+     `产值 ${n(dAmt)} 万元（占 ${li(dAmt)}）· 同比 ${pctEm(yy.diesel)}`, 'oil', ''],
+    ['汽油累计', n(p.gas), '吨',
+     `产值 ${n(gAmt)} 万元（占 ${li(gAmt)}）· 同比 ${pctEm(yy.gas)}`, 'fuel', ''],
+    ['产值金额', n(aAmt), '万元',
+     `柴油 ${n(dAmt)} + 汽油 ${n(gAmt)} · 吨均价 ${n(TAX ? p.price : p.price0)} 元`, 'cash', ''],
+    ['累计销量同比', pctTxt(yy.t), '',
+     `去年 ${n(pv.t)} 吨 · 净增 ${(p.t - pv.t) >= 0 ? '+' : ''}${n(+(p.t - pv.t).toFixed(1))} 吨`,
+     'trend', yy.t === null ? '' : (yy.t >= 0 ? 'hl-up' : 'hl-dn')],
+    ['近 30 天日销', n(+pAvg.toFixed(1)), '吨/日',
+     `合计 ${n(+w30.reduce((a, x) => a + x.t, 0).toFixed(1))} 吨 · 峰值 `
+     + `${n(Math.max(...w30.map(x => x.t), 0))} · 在营 ${w30.filter(x => x.t > 0).length}/${w30.length} 天`,
+     'tag', '']
+  ]);
+}
+
+/* 本月信息带：两种视角同一组 7 个槽位。
+   公司视角取月度聚合对象；单站视角取该对的 months[月号]（同一会计月、同一算法）。 */
+function monthKpi(m) {
+  const P = isPair() ? scope() : null;
+  const mo = +MK.split('-')[1];
+  const M = P ? (P.months || {})[String(mo)] : null;
+  if (P && !M) return '';
+  const s = P ? M : m;                       // 统一取数对象
+
+  /* ★ 公司视角必须跟着口径开关取数。
+     月对象里并存两套数：零售 t/amt/wan 与全口径 ft/famt/fwan（含小额配送）。
+     原来这里固定取 t/amt，于是开着「全口径」时信息带说 956.3 吨，
+     同屏的会计月轨迹柱却是 976.3 吨（10 月差 2,954 吨），看着就是「数据不对」。
+     单站视角没有小额，s 本身就是该实体的合计，不受影响。 */
+  const useFull = !P && SCP === 'full';
+  const kV = (kF, kR) => (useFull && m[kF] !== undefined && m[kF] !== null) ? m[kF] : s[kR];
+  const _t = kV('ft', 't');
+  const _amt = kV('famt', 'amt');
+  const _wan = kV('fwan', 'wan');
+
+  // 环比：公司用 D.months 的上一个会计月，单站用该对的上一月
+  const idx = D.meta.month_order.indexOf(MK);
+  const prevKey = D.meta.month_order[idx + 1];
+  const pm = P ? (prevKey ? (P.months || {})[String(+prevKey.split('-')[1])] : null)
+    : (prevKey ? D.months[prevKey] : null);
+  /* 上一月也按同一口径取，否则「全口径本月 vs 零售上月」比出来的环比是假的 */
+  const pmT = pm ? ((useFull && pm.ft !== undefined && pm.ft !== null) ? pm.ft : pm.t) : 0;
+  let mom = '';
+  if (pm && pm.days > 0 && s.days > 0 && pmT > 0) {
+    const d = (_t / s.days / (pmT / pm.days) - 1) * 100;
+    mom = `<em class="${d >= 0 ? 'up' : 'dn'}">${d >= 0 ? '+' : ''}${d.toFixed(1)}%</em>`;
+  }
+  const _price = _t ? Math.round((TAX ? _amt : _wan) * 1e4 / _t) : 0;
+  const items = [
+    ['本月销量', n(_t), '吨'],
+    [TAX ? '含税销售额' : '不含税收入', n(TAX ? _amt : _wan), '万元'],
+    [TAX ? '不含税收入' : '含税销售额', n(TAX ? _wan : _amt), '万元'],
+    P
+      ? ['占公司', (s.t / (tv(m) || 1) * 100).toFixed(1), '%']
+      : ['大客户占比', m.big_share, '%'],
+    ['吨均价', _price ? n(_price) : '—', '元'],
+    ['在营站点', P ? P.n_st : new Set(m.stations.map(x => base(x.name))).size, P ? '站' : '对'],
+    ['已填天数', (s.days || 0) + ' 天', ''],
+    /* mom 是「日均 vs 上月日均」的环比，原先挂在「已填天数」的数值位，
+       显示成「2 天 +20.9%」，任何人都会读成「天数涨了两成」——语义完全错。
+       单独给一项「日均销量」承接，涨跌色才落在它该落的地方。 */
+    ['日均销量', n(_t / (s.days || 1)), `吨/日${mom ? ' ' + mom : ''}`]
+  ];
+  return items.map(([l, v, u]) => {
+    // 日均销量的环比是「日均 vs 上月日均」，样本天数少时加一句提示，避免被当成确定趋势
+    const tip = l === '日均销量'
+      ? `环比 = 本月日均 ÷ 上一会计月日均 − 1${(s.days || 0) < 10
+        ? `；本月仅 ${s.days} 天，样本短，仅供参考` : ''}`
+      : '';
+    return `
+    <div class="mi"${tip ? ` title="${tip}"` : ''}><span class="l">${l}</span><span class="n">${v}</span><span class="u">${u}</span></div>`;
+  }).join('');
+}
+
+/* ---------- 日柱 ----------
+   `d` 兼容两种来源：公司视角来自 D.daily_win（带小额 xt 与金额 amt），
+   单站视角来自 views.pairs[*].daily（只有吨/柴/汽，没有金额与小额）。
+   缺字段就少一行提示，不补 0 糊过去。 */
+function cols(w) {
+  const ds = (w && w.days) || [];
+  if (!ds.length) return '<div style="color:#7e91a9;font-size:12px">该区间暂无数据</div>';
+  const full = SCP === 'full' && !isPair();
+  const mx = Math.max(...ds.map(d => d.t + (full ? (d.xt || 0) : 0)), 1);
+  const every = ds.length > 40 ? 5 : (ds.length > 31 ? 2 : 1);
+  return ds.map((d, i) => {
+    const xt = full ? (d.xt || 0) : 0;
+    const h = Math.max(4, (d.t + xt) / mx * 142);
+    const hr = (d.t + xt) ? d.t / (d.t + xt) * 100 : 100;
+    const hd = d.t ? Math.max(2, d.diesel / d.t * 100) : 100;
+    const lb = d.lab || '';
+    const amtLine = (d.amt === undefined || d.amt === null) ? '' : `<br>含税 ${n(d.amt)} 万`;
+    return `<div class="col" style="--i:${i}">
+      <div class="tip">${d.date || lb} · ${n(d.t + xt)} 吨${xt ? `（含小额 ${n(xt)}）` : ''}<br>
+        柴 ${n(d.diesel)} / 汽 ${n(d.gas)}${amtLine}</div>
+      <div class="bv">${ds.length > 50 ? '' : Math.round(d.t + xt)}</div>
+      <div class="bar" style="height:${h}px">
+        <u style="height:${hd}%;z-index:2"></u>
+        ${xt ? `<span style="position:absolute;left:0;right:0;top:0;height:${(100 - hr).toFixed(1)}%;background:#4a6382"></span>` : ''}
+      </div>
+      <div class="lb">${i % every === 0 ? lb.slice(3) : ''}</div></div>`;
+  }).join('');
+}
+
+/* ---------- 15 对分组 ---------- */
+const SFX = '东西南北';
+const base = nm => SFX.indexOf(nm.slice(-1)) >= 0 ? nm.slice(0, -1) : nm;
+/* road 字段历史数据里有 "None" 字符串（表格合并单元格被当文本），统一清洗 */
+const cleanRoad = r => {
+  const v = (r === null || r === undefined ? '' : String(r)).trim();
+  return (v && v !== 'None' && v !== 'none' && v !== 'null') ? v : '';
+};
+
+function buildPairs(m) {
+  const map = new Map();
+  m.stations.forEach(s => {
+    const b = base(s.name);
+    let p = map.get(b);
+    if (!p) { p = {name: b, road: '', t: 0, diesel: 0, gas: 0,
+                   amt: 0, wan: 0, st: []}; map.set(b, p); }
+    if (!p.road) p.road = cleanRoad(s.road);
+    p.t += s.t; p.diesel += s.diesel; p.gas += s.gas; p.amt += s.amt; p.wan += s.wan;
+    p.st.push(s);
+  });
+  const arr = [...map.values()];
+  /* 小额配送：公司级独立实体，与 15 对并列。
+     ★ 它必须留在 buildPairs 的返回里 —— 「15 对明细表」和「各站年度销量」两张表
+       正是靠这个数组拿到小额行；只有「全口径」下才 push，仅零售口径自然就没有小额。
+     站点排行（#sttop）是另一回事：那里只排 15 对实体站，在调用处过滤掉即可。 */
+  const xt = m.xt || 0;
+  if (SCP === 'full' && xt > 0) {
+    arr.push({name: XIAO_NAME, road: '公司级', t: xt,
+              diesel: m.xd || 0, gas: m.xg || 0,
+              amt: m.xamt || 0, wan: m.xwan || 0, st: [], virtual: true});
+  }
+  const den = (SCP === 'full' ? m.t + xt : m.t) || 1;
+  arr.forEach(p => {
+    p.t = +p.t.toFixed(2);
+    p.diesel = +p.diesel.toFixed(2); p.gas = +p.gas.toFixed(2);
+    p.amt = +p.amt.toFixed(2); p.wan = +p.wan.toFixed(2);
+    p.share = +(p.t / den * 100).toFixed(1);
+    p.price = p.t ? Math.round(p.amt * 1e4 / p.t) : 0;
+    p.price0 = p.t ? Math.round(p.wan * 1e4 / p.t) : 0;
+    p.st.sort((a, b) => b.t - a.t);
+  });
+  return arr.sort((a, b) => b.t - a.t);
+}
+
+/* 排行条：全公司视角下 15 对（+小额）可展开、可下钻；
+   单站视角下传 flat=true，只列该实体的分量，不再带下钻按钮。 */
+function pairBars(el, arr, flat) {
+  const mx = Math.max(...arr.map(x => x.t), 1);
+  el.innerHTML = arr.map((p, i) => {
+    const goTxt = p.virtual ? '公司级' : `${(p.st || []).length}站`;
+    const go = flat ? '' : `<s class="go" data-go="${p.name}" title="进入单站视角">${goTxt} ›</s>`;
+    const sub = (!flat && (p.st || []).length) ? `<div class="sub">${p.st.map(s => `
+        <div class="sr"><span>${s.name}</span>
+          <div class="tr"><div class="fl" style="width:${p.t ? (s.t / p.t * 100).toFixed(1) : 0}%"></div></div>
+          <b>${n(s.t)}</b></div>`).join('')}</div>` : '';
+    return `<div class="bl pb${i === 0 ? ' top' : ''}${p.name === PSEL ? ' cur' : ''}${
+      p.virtual ? ' vx' : ''}" data-i="${i}" style="--i:${i}">
+      <div class="nm" title="${p.name}"><i>${i + 1}</i>${p.name}${go}</div>
+      <div class="tr"><div class="fl" style="width:${(p.t / mx * 100).toFixed(1)}%"></div></div>
+      <div class="vl">${n(p.t)}<small>${p.share}%</small></div>${sub}</div>`;
+  }).join('');
+  el.querySelectorAll('.pb').forEach(e => {
+    e.onclick = ev => {
+      const g = ev.target.closest('.go');
+      if (g && g.dataset.go) { ev.stopPropagation(); pickScope(g.dataset.go); return; }
+      if (!flat) e.classList.toggle('open');
+    };
+  });
+}
+
+/* ---------- 横条 ---------- */
+function bars(el, arr) {
+  const mx = Math.max(...arr.map(x => x.t), 1);
+  el.innerHTML = arr.map((x, i) => `
+    <div class="bl ${i === 0 ? 'top' : ''}" style="--i:${i}"><div class="nm" title="${x.name}">${x.name}</div>
+      <div class="tr"><div class="fl" style="width:${x.t / mx * 100}%"></div></div>
+      <div class="vl">${n(x.t)}<small>${x.share}%</small></div></div>`).join('');
+}
+
+/* ---------- 环形 ---------- */
+function donut(el, segs, valEl, txt) {
+  const total = segs.reduce((s, x) => s + x.t, 0) || 1;
+  let off = 25, svg = '';
+  segs.forEach((s, i) => {
+    const len = s.t / total * 100, gap = Math.min(0.7, len * 0.25), arc = Math.max(0.15, len - gap);
+    svg += `<circle r="15.9" cx="21" cy="21" fill="none" stroke="${PAL[i % PAL.length]}"
+      stroke-width="6" stroke-dasharray="${arc.toFixed(3)} ${(100 - arc).toFixed(3)}"
+      stroke-dashoffset="${off.toFixed(3)}"></circle>`;
+    off -= len;
+  });
+  el.innerHTML = svg; if (valEl) valEl.textContent = txt;
+}
+function listify(el, segs) {
+  el.innerHTML = segs.map((s, i) => `
+    <div class="ci"><i style="background:${PAL[i % PAL.length]}"></i><span>${s.name}</span>
+      <b>${n(s.t)} 吨</b><u>${s.share}%</u></div>`).join('');
+}
+
+/* ---------- 单站消费结构（仅单站视角） ----------
+   一块顶三块：柴汽结构（环形）+ 渠道结构（与公司均值对照的竖线）+ 分站拆解。
+   公司级的「大客户构成」没有站级归属，单站视角下整块让位给这里，避免拿公司数冒充本站。 */
+function vCard(P) {
+  const box = $('#vcard');
+  if (!box) return;
+  $('#vcard-t').textContent = `${P.name} 消费结构`;
+  const hasChan = (P.chan || []).length > 0;
+  $('#vcard-span').textContent = hasChan
+    ? '柴汽结构 · 渠道结构（竖线为公司均值）· 分站拆解'
+    : '柴汽结构 · 无渠道拆分 · 分站拆解';
+
+  const t = P.t || 0;
+  const segs = [
+    { name: '柴油', t: P.diesel, share: t ? +(P.diesel / t * 100).toFixed(1) : 0 },
+    { name: '汽油', t: P.gas, share: t ? +(P.gas / t * 100).toFixed(1) : 0 }
+  ];
+  const dAmt = TAX ? P.damt : P.dwan;
+  const gAmt = TAX ? P.gamt : P.gwan;
+  const base = P.chan_base || {};
+  const rows = (P.chan || []).slice(0, 8);
+  const mx = Math.max(...rows.map(x => x.share), 1);
+
+  box.innerHTML = `
+    <div>
+      <div class="vt">柴汽结构 <em>${TAX ? '含税' : '不含税'} · 万元</em></div>
+      <div class="donut-wrap" style="gap:14px;align-items:flex-start">
+        <div class="donut" style="width:128px;height:128px">
+          <svg viewBox="0 0 42 42" id="vdonut"></svg>
+          <div class="ctr"><b style="font-size:15px">${n(t)}</b><span>累计 吨</span></div>
+        </div>
+        <div class="clist" style="gap:7px">
+          <div class="ci"><i style="background:#3f8fd0"></i><span>柴油</span><b>${n(P.diesel)}</b><u>${segs[0].share}%</u></div>
+          <div class="ci"><i style="background:#d9b878"></i><span>汽油</span><b>${n(P.gas)}</b><u>${segs[1].share}%</u></div>
+          <div class="ci" style="margin-top:4px;padding-top:6px;border-top:1px dashed var(--line)">
+            <i style="background:transparent"></i><span>柴汽产值</span>
+            <b>${n(dAmt)} / ${n(gAmt)}</b><u>万元</u></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="vt">渠道结构 <b>${hasChan ? '2026 累计 · 竖线为公司均值' : '无渠道拆分'}</b></div>
+      ${hasChan ? rows.map(c => {
+        const b = base[c.name];
+        const dv = b == null ? null : c.share - b;
+        return `<div class="vbase"><span>${c.name}</span>
+          <div class="tr"><div class="fl" style="width:${(c.share / mx * 100).toFixed(1)}%"></div>
+            <span class="mk" style="left:${((b || 0) / mx * 100).toFixed(1)}%"></span></div>
+          <b>${c.share}%</b><u class="${dv === null ? '' : (dv >= 0 ? 'pos' : 'neg')}">${
+            dv === null ? '—' : (dv >= 0 ? '+' : '') + dv.toFixed(1)}</u></div>`;
+      }).join('')
+        : `<div style="font-size:11px;color:var(--sub);line-height:1.85">
+             ${P.name}在 11 张站级渠道表里没有对应行（源表只按站统计），
+             故此处不展示渠道结构 —— 宁缺不造数。</div>`}
+    </div>
+    <div>
+      <div class="vt">分站拆解 <b>${P.name === XIAO_NAME ? '不适用' : '东西 / 南北'}</b></div>
+      <div class="vsub">${P.name === XIAO_NAME
+        ? `<div style="font-size:11px;color:var(--sub);line-height:1.85">
+             小额配送是公司级独立行，不落到任何一座站，故无分站拆解。
+             它的柴汽结构、逐月轨迹与同比都在上方的卡片里。</div>`
+        : ((P.sub || []).map(s => `
+        <div class="vs1">
+          <div class="t1"><span>${s.name}</span><b>${n(s.t)} 吨</b></div>
+          <div class="bar2"><i style="width:${s.share}%"></i></div>
+          <div class="t2"><span>占 ${s.share}%</span>
+            <span>同比 <em class="${pctCls(s.yoy)}" style="font-style:normal;font-weight:640">${pctTxt(s.yoy)}</em></span></div>
+        </div>`).join('')
+          || `<div style="font-size:11px;color:var(--sub)">公司级实体，无分站</div>`)}
+      </div>
+    </div>`;
+  donut($('#vdonut'), segs, null, '');
+}
+
+/* ---------- 路段结构的月份下拉 ----------
+   DOM 只建一次（否则每次 render 重建会丢焦点/选中态），之后只同步 value。
+   单站视角下这张图变成「同路段各对对比」，没有月度维度 → 直接藏掉控件。 */
+function syncRdSel(P) {
+  const sel = $('#rdsel');
+  if (!sel) return;
+  if (P) { sel.style.display = 'none'; return; }
+  sel.style.display = '';
+  const RD = (D.yearly && D.yearly.roads) || {};
+  const ms = Object.keys(RD.months || {}).sort((a, b) => +a - +b);
+  if (RDSEL && ms.indexOf(RDSEL) < 0) RDSEL = '';   // 数据里没这个月就退回全年
+  if (!sel.dataset.built) {
+    sel.innerHTML = `<option value="">全年</option>`
+      + ms.map(m => `<option value="${m}">${m} 月${+m === LIVE_M ? '（进行中）' : ''}</option>`).join('');
+    sel.dataset.built = '1';
+    sel.onchange = () => { RDSEL = sel.value; render(); };
+  }
+  sel.value = RDSEL;
+}
+
+/* ---------- 会计月轨迹序列 ----------
+   公司视角直接用 payload 里按公司算好的 6 个月（带小额段）；
+   单站视角用该实体自己的 months（同一会计月、同一算法），小额段恒为 0
+   —— 小额本身就是一个独立实体，再拆一层会重复计数。 */
+function trendOf(P) {
+  if (!P || !P.months) return D.meta.trend || [];
+  const out = [];
+  for (let mo = LIVE_M - 5; mo <= LIVE_M; mo++) {
+    const v = P.months[String(mo)];
+    if (!v) continue;
+    out.push({
+      k: `${CUR_Y}-${String(mo).padStart(2, '0')}`, m: mo, name: `${mo}月`,
+      range: acctRange(mo), t: v.t, x: 0, d: v.diesel, g: v.gas,
+      days: v.days, partial: mo === LIVE_M, prev: v.prev, yoy: v.yoy,
+      avg: v.days ? v.t / v.days : 0
+    });
+  }
+  return out;
+}
+
+/* ---------- 主渲染 ---------- */
+/* 前一日各站销量：日走势柱图正上方的极窄小字带。
+   口径跟随开关（仅零售时不含小额）。单站视角只报本对的一个数，不再重复列名、
+   也不混入公司级的小额配送（那会把一站说大）。 */
+function renderPd(P) {
+  const box = $('#pdbar');
+  if (!box) return;
+  const PD = D.prev_day || {};
+  const items = PD.items || [];
+  if (!items.length) { box.innerHTML = ''; return; }
+  const isFull = SCP === 'full';
+  const xiao = isFull ? (PD.xiao || 0) : 0;
+  const XIAO_TAG = '小额配送';
+
+  let who, sum, list;
+  if (!P) {
+    who = '15 对';
+    list = items.slice();
+    sum = list.reduce((a, x) => a + x.t, 0) + xiao;
+  } else if (P.name === XIAO_TAG) {
+    who = XIAO_TAG;
+    list = [];
+    sum = xiao;
+  } else {
+    const one = items.find(x => x.name === P.name);
+    if (!one) { box.innerHTML = ''; return; }
+    who = P.name;
+    list = [];
+    sum = one.t;
+  }
+
+  const cell = (cls, nm, v) =>
+    `<span class="${cls}${v > 0 ? '' : ' zero'}">${nm}<b>${n(v)}</b></span>`;
+  let h = '<div class="pdsum">'
+    + `<span class="pdk">前一日 ${PD.label || '—'}</span>`
+    + `<span class="pdk">${who}合计 <b class="pdt">${n(sum)}</b> 吨</span>`
+    + '</div>';
+  if (list.length) {
+    h += '<div class="pdgrid">'
+      + list.map(x => cell('pdi', x.name, x.t)).join('')
+      + (xiao > 0 ? cell('pdx', XIAO_TAG, xiao) : '')
+      + '</div>';
+  }
+  box.innerHTML = h;
+}
+
+function render() {
+  /* MK 可能被指到「只有轨迹总量、没有逐站明细」的会计月（D.months 里没有这个键），
+     那样 monthKpi 读 m.xx 就是 undefined 抛错、整页白屏。兜底回落到最新有明细的月。 */
+  if (!D.months[MK]) MK = D.meta.month_order[0];
+  const m = D.months[MK];
+  const P = isPair() ? scope() : null;
+  const CO = VIEWS().company;
+
+  $('#kpis').innerHTML = ytdKpi();
+  $('#mkpi').innerHTML = monthKpi(m);
+
+  /* ---- 日销量走势：公司走 D.daily_win（跨月拼接、带缺报标记），
+          单站走该实体的近 60 天（源表只保留 2025-11 起逐日） ---- */
+  let _w;
+  if (P) {
+    const ds = (P.daily || []).slice(-WIN);
+    const tot = ds.reduce((a, x) => a + x.t, 0);
+    _w = {
+      days: ds, total: +tot.toFixed(1),
+      avg: ds.length ? +(tot / ds.length).toFixed(1) : 0,
+      start: ds.length ? ds[0].date : '', end: ds.length ? ds[ds.length - 1].date : '',
+      missing: []
+    };
+  } else {
+    const raw = (D.daily_win && D.daily_win[String(WIN)]) || { days: [], missing: [] };
+    /* ★ daily_win 里的 total / avg 是 build 阶段按**纯零售**预算好的，
+       而日柱（cols）会按当前口径叠上当日小额 xt —— 两者因此对不上：
+       近 30 天柱高之和 15,011.6 吨，「跨度说明」却写 12,246.2 吨（差的就是小额 2,765.4）。
+       这里按当前口径重算，保证「柱高之和 = 跨度说明的合计」。 */
+    const _f = SCP === 'full';
+    const _ds = raw.days || [];
+    const _vt = d => (d.t || 0) + (_f ? (d.xt || 0) : 0);
+    const _sum = _ds.reduce((a, d) => a + _vt(d), 0);
+    _w = { ...raw,
+      total: +_sum.toFixed(1),
+      avg: _ds.length ? +(_sum / _ds.length).toFixed(1) : 0,
+      start: _ds.length ? _ds[0].date : '',
+      end: _ds.length ? _ds[_ds.length - 1].date : '' };
+  }
+  $('#trend-t').textContent = P
+    ? `日销量走势 · ${P.name}（滚动区间，跨会计月）`
+    : '日销量走势（滚动区间，跨会计月）';
+  const _ce = $('#cols'); _ce.innerHTML = cols(_w);
+  _ce.classList.toggle('few', _w.days.length < 8);
+  renderPd(P);
+  $('#trend-span').textContent = `${_w.start} ~ ${_w.end} · ${_w.days.length} 天 · 合计 ${n(_w.total)} 吨 · 日均 ${n(_w.avg)} 吨`
+    + (_w.missing && _w.missing.length ? ` · 缺报 ${_w.missing.length} 天` : '')
+    + (P ? ' · 单站仅保留近 60 天逐日' : '');
+
+  /* ---- 会计月轨迹：堆叠柱（柴油 / 汽油 / 小额配送） ----
+     原来一根柱子只给总量，用户看不出柴汽结构；改堆叠后一段一色，
+     柱高仍是该月合计，段高按占比，鼠标悬停给三段明细。 */
+  const tr = trendOf(P);
+  const tvv = x => x.t + (SCP === 'full' && !P ? (x.x || 0) : 0);
+  const mx = Math.max(...tr.map(tvv), 1);
+  const PICK = new Set(D.meta.month_order);
+  const H = 88;
+  $('#mtrack').innerHTML = tr.map((x, i) => {
+    const xa = (SCP === 'full' && !P) ? (x.x || 0) : 0;
+    const dseg = x.d || 0, gseg = x.g || 0;
+    const raw = tvv(x);                       // 真实合计（0 就是 0，不能拿 1 兜底去画柱）
+    const tot = raw || 1;
+    /* 段高的百分比基准是柱子自身，故按 100 归一（曾误用 H=88，导致三段只占柱高 88%、
+       柱顶露出 12% 的深色底，被误读成「还有一段没填」） */
+    const hd = dseg / tot * 100, hg = gseg / tot * 100, hx = xa / tot * 100;
+    /* 该月有吨量但源表没拆柴汽（小额配送 11 月即如此）→ 补一段「未拆分」斜纹占位，
+       否则三段全 0，柱子渲染成透明空壳；该月本身为 0 → 不画柱，数值位标「—」 */
+    const unsplit = (hd + hg + hx) < 0.5 && raw > 0;
+    const barH = raw > 0 ? Math.max(3, raw / mx * H) : 0;
+    const segHtml = unsplit
+      ? '<i class="s0" style="height:100%"></i>'
+      : `<i class="s1" style="height:${hd.toFixed(2)}%"></i>`
+        + `<i class="s2" style="height:${hg.toFixed(2)}%"></i>`
+        + (hx > 0 ? `<i class="s3" style="height:${hx.toFixed(2)}%"></i>` : '');
+    /* ---- 悬停浮层：总量 + 各品类数值与占比 ----
+       占比分母恒为 raw（该柱合计），三段相加即 100%，与柱子上三段的高度一一对应。
+       单站视角没有小额段，就只列柴汽；源表未拆柴汽的月份只给一条斜纹「未拆分」。 */
+    const _row = (cls, lab, val, pct) => `<div class="mt-r"><i class="${cls}"></i>`
+      + `<span>${lab}</span><b>${n(val)}</b><em>${pct.toFixed(1)}%</em></div>`;
+    let _rows = '', _parts = [];
+    if (raw > 0) {
+      if (unsplit) {
+        _rows = _row('c0', '未拆分柴汽', raw, 100);
+      } else {
+        if (dseg > 0) _parts.push(['c1', '柴油', dseg]);
+        if (gseg > 0) _parts.push(['c2', '汽油', gseg]);
+        if (xa > 0) _parts.push(['c3', '小额配送', xa]);
+        if (!_parts.length) _parts = [['c0', '未拆分柴汽', raw]];
+        /* 占比各自四舍五入会凑不出 100.0（实测 73.9+24.0+2.0=99.9）。
+           用最大余额法：先把残差补给占比最大的那一项，保证三行相加恒为 100.0。 */
+        const _pcs = _parts.map(p => +(p[2] / raw * 100).toFixed(1));
+        const _res = +(100 - _pcs.reduce((a, b) => a + b, 0)).toFixed(1);
+        if (_res) {
+          const _mi = _pcs.indexOf(Math.max(..._pcs));
+          _pcs[_mi] = +(_pcs[_mi] + _res).toFixed(1);
+        }
+        _rows = _parts.map((p, i) => _row(p[0], p[1], p[2], _pcs[i])).join('');
+      }
+    }
+    /* 占比条：与下面三行同色同序，flex 权重吃吨数，宽度即占比 */
+    const _segs = unsplit ? '' : (dseg > 0 ? `<i class="c1" style="flex:${dseg}"></i>` : '')
+      + (gseg > 0 ? `<i class="c2" style="flex:${gseg}"></i>` : '')
+      + (xa > 0 ? `<i class="c3" style="flex:${xa}"></i>` : '');
+    const _pt = (raw > 0 && _segs) ? `<div class="mt-pt">${_segs}</div>` : '';
+    const _tip = `<div class="mtip">
+        <div class="mt-h"><b>${x.name}</b><span>${x.range}</span></div>
+        ${raw > 0
+          ? `<div class="mt-tot">${n(raw)}<small>吨</small></div>${_pt}${_rows}
+             <div class="mt-f">${x.days} 天 · 日均 ${n(raw / (x.days || 1))} 吨${
+               (x.yoy === null || x.yoy === undefined) ? '' : ` · 同比 ${x.yoy >= 0 ? '+' : ''}${x.yoy.toFixed(1)}%`}</div>`
+          : `<div class="mt-none">该会计月源表无记录</div>`}
+      </div>`;
+    const _aria = `${x.name} ${x.range}：${raw > 0 ? `合计 ${n(raw)} 吨，柴油 ${n(dseg)} 吨，汽油 ${n(gseg)} 吨`
+      + (xa > 0 ? `，小额配送 ${n(xa)} 吨` : '') : '无记录'}`;
+    return `<div class="ycol${x.k === MK ? ' cur' : ''}${PICK.has(x.k) ? ' pick' : ''}${raw > 0 ? '' : ' none'}" data-k="${x.k}" style="--i:${i}" aria-label="${_aria}">
+      ${_tip}
+      <div class="bw"><div class="n">${raw > 0 ? n(raw) : '—'}</div>
+        ${raw > 0 ? `<div class="bar stk ${x.partial ? 'now' : ''}" style="height:${barH}%;${x.partial ? 'opacity:.72' : ''}">${segHtml}</div>` : ''}</div>
+      <div class="l">${x.name}${x.partial ? '<i>进行中</i>' : ''}${raw > 0 ? '' : '<i>无数据</i>'}</div>
+      <div class="lr">${x.range}</div>
+      <div class="ya ${x.yoy === null || x.yoy === undefined ? 'flat' : (x.yoy >= 0 ? 'up' : 'dn')}">${
+        x.yoy === null || x.yoy === undefined ? '—' : (x.yoy >= 0 ? '+' : '') + x.yoy.toFixed(1) + '%'}</div>
+    </div>`;
+  }).join('');
+  const fd = tr.filter(x => !x.partial);
+  /* 是否存在「有吨量但源表未拆柴汽」的月份（小额配送常见）→ 图例补一条斜纹说明 */
+  const hasUnsplit = tr.some(x => {
+    const _xa = (SCP === 'full' && !P) ? (x.x || 0) : 0;
+    return tvv(x) > 0 && ((x.d || 0) + (x.g || 0) + _xa) < 0.5;
+  });
+  const isXiao = P && P.name === XIAO_NAME;
+  const xsum = (SCP === 'full' && !P) ? tr.reduce((a, x) => a + (x.x || 0), 0) : 0;
+  $('#mtrack-note').innerHTML = (fd.length >= 2
+    ? `<b>环比</b>（${!P ? (SCP === 'full' ? '全口径' : '零售') : '该实体合计'}）：${fd[fd.length - 2].name} → ${fd[fd.length - 1].name}
+       ${n(tvv(fd[fd.length - 2]))} → ${n(tvv(fd[fd.length - 1]))} 吨，
+       <em class="${tvv(fd[fd.length - 1]) >= tvv(fd[fd.length - 2]) ? 'up' : 'dn'}" style="font-style:normal;font-weight:600">
+       ${tvv(fd[fd.length - 1]) >= tvv(fd[fd.length - 2]) ? '+' : ''}${((tvv(fd[fd.length - 1]) / tvv(fd[fd.length - 2]) - 1) * 100).toFixed(1)}%</em>；
+       日均 ${n(tvv(fd[fd.length - 1]) / (fd[fd.length - 1].days || 1))} vs ${n(tvv(fd[fd.length - 2]) / (fd[fd.length - 2].days || 1))} 吨。
+       区间合计 ${n(tr.reduce((a, x) => a + tvv(x), 0))} 吨。`
+    : '暂无两个完整会计月可对比。')
+    + `<br><span style="font-size:10.5px;opacity:.85">柱体分段：
+       <i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#3f8fd0;margin:0 3px 0 6px;vertical-align:-1px"></i>柴油
+       <i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#d9b878;margin:0 3px 0 8px;vertical-align:-1px"></i>汽油${xsum > 0
+      ? `<i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#4a6382;margin:0 3px 0 8px;vertical-align:-1px"></i>小额配送 ${n(xsum)} 吨`
+      : ''}${hasUnsplit
+      ? `<i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:repeating-linear-gradient(45deg,#3f5670,#3f5670 3px,#2a3b4f 3px,#2a3b4f 6px);margin:0 3px 0 8px;vertical-align:-1px"></i>未拆分柴汽（源表只有吨量）`
+      : ''}${P && !isXiao ? ' · 小额配送是独立实体，不计入本站' : ''}</span>`;
+
+  /* ---- 路段结构：默认看全年累计，可用标题行下拉切到单个会计月 ----
+     口径与「站点排行」一致：分母恒为 15 对实体站合计，不含小额配送。
+     单站视角下这张图变成「同路段各对对比」（相对位置才有意义），此时隐藏月份下拉。 */
+  let _roadSpan = '';
+  const _RD = (D.yearly && D.yearly.roads) || {};
+  syncRdSel(P);
+  if (P) {
+    const ps = VIEWS().pairs || {};
+    const same = Object.keys(ps).filter(k => ps[k].road === P.road && k !== XIAO_NAME)
+      .map(k => ({ name: k, t: ps[k].t, road: ps[k].road }))
+      .sort((a, b) => b.t - a.t);
+    const roadTotal = same.reduce((a, x) => a + x.t, 0);
+    same.forEach(x => x.share = roadTotal ? +(x.t / roadTotal * 100).toFixed(1) : 0);
+    bars($('#roads'), same.length ? same : [{ name: P.name, t: P.t, share: 100 }]);
+    _roadSpan = `${P.road || '—'}高速 · 共 ${same.length || 1} 对 · 本年累计 · 占比为路段内份额`;
+  } else {
+    /* 切到单月时按该月大小重排 —— 用户切月就是想看「这个月哪条路最多」，
+       硬保持全年次序会出现「西禹 207.7 排在西汉 167.1 之后」这种反直觉读法。 */
+    const useMon = !!(RDSEL && _RD.months && _RD.months[RDSEL]);
+    const src = useMon ? _RD.months[RDSEL] : (_RD.annual || {});
+    const roads = Object.keys(src)
+      .filter(k => (src[k] || 0) > 0)
+      .map(k => ({ name: k, t: src[k] || 0 }))
+      .sort((a, b) => b.t - a.t);
+    const _tot = roads.reduce((a, x) => a + x.t, 0) || 1;
+    roads.forEach(r => r.share = +(r.t / _tot * 100).toFixed(1));
+    bars($('#roads'), roads);
+    const _d = (_RD.days || {})[RDSEL];
+    _roadSpan = useMon
+      ? `${RDSEL} 月 · ${_d ? `${_d} 天 · ` : ''}${roads.length} 条路段 · 不含小额`
+      : `截至 ${D.last_date || '—'} · ${roads.length} 条路段 · 不含小额`;
+  }
+  $('#roads').closest('.card').querySelector('h2').textContent = P ? '同路段各对对比' : '路段结构';
+  const _rspan = $('#roads-span');
+  if (_rspan) _rspan.textContent = _roadSpan;
+
+  /* ---- 收款渠道 ----
+     公司按月（当月口径）；单站用 2026 累计渠道结构（源表只到年累计）。
+     小额配送在 11 张渠道表里没有对应行 → 无渠道拆分，明确标注不造数。 */
+  let chSegs, chTot, chNote;
+  if (P) {
+    chTot = P.chan_t || 0;
+    const top6 = (P.chan || []).slice(0, 6);
+    const otherT = (P.chan || []).slice(6).reduce((s, x) => s + x.t, 0);
+    chSegs = otherT > 0 ? top6.concat([{ name: '其他', t: +otherT.toFixed(1),
+      share: +(otherT / chTot * 100).toFixed(1) }]) : top6;
+    chNote = chTot ? '2026 累计' : '无渠道拆分';
+  } else {
+    chTot = m.t;
+    const top6 = m.channels.slice(0, 6);
+    const otherT = m.channels.slice(6).reduce((s, x) => s + x.t, 0);
+    chSegs = otherT > 0 ? top6.concat([{ name: '其他', t: +otherT.toFixed(1),
+      share: +(otherT / m.t * 100).toFixed(1) }]) : top6;
+    chNote = (SCP === 'full' && (m.xt || 0) > 0) ? '零售渠道 · 小额配送无渠道行' : '按销量占比';
+  }
+  donut($('#donut'), chSegs, $('#d-v'), n(chTot));
+  listify($('#chs'), chSegs);
+  $('#donut').closest('.card').querySelector('.h>span').textContent = chNote;
+
+  /* ---- 15 对排行的取数：公司用当月 30 站，单站用该实体自身 ---- */
+  const pairs = buildPairs(m);
+  const stCard = $('#sttop').closest('.card');
+  if (!P) {
+    stCard.querySelector('h2').textContent = '站点排行 · 15 对';
+    /* 分口径明确交代小额的去向：
+       全口径下小额是第 16 个实体、在两张表里独立成行，但**不进这张排行**——
+       排行只排有站点的 15 对，所以占比要按 15 对自身重算，否则加总不到 100%。
+       仅零售口径下根本不存在小额，也就无需提。 */
+    const _xt = (SCP === 'full') ? (m.xt || 0) : 0;
+    const stTop = pairs.filter(p => !p.virtual);
+    const stDen = stTop.reduce((a, p) => a + p.t, 0) || 1;
+    const stArr = stTop.map(p => ({ ...p, share: +(p.t / stDen * 100).toFixed(1) }));
+    $('#sttop-span').textContent = `${m.name} · ${m.days} 天 · 30 站合并为 15 对`
+      + (SCP === 'full' ? ' · 全口径（占比按 15 对内部计）' : ' · 仅零售')
+      + (_xt > 0 ? ` · 小额 ${n(_xt)} 吨另列（见 KPI 与明细表）` : '')
+      + ' · 点「站›」进单站视角';
+    pairBars($('#sttop'), stArr);
+  } else {
+    stCard.querySelector('h2').textContent = `${P.name} · 分站`;
+    $('#sttop-span').textContent = `本年累计（东西/南北拆解）`;
+    const sub = (P.sub || []).map(s => ({ ...s, st: [] }));
+    pairBars($('#sttop'), sub, true);
+  }
+
+  /* ---- 大客户构成：只有公司级明细，单站视角整块让位给「消费结构」 ---- */
+  const cust = $('#custgrid'), vg = $('#vgrid');
+  if (cust) cust.style.display = P ? 'none' : '';
+  if (vg) vg.style.display = P ? '' : 'none';
+
+  if (!P) {
+    const clTop = m.clients.slice(0, 5);
+    const clOther = m.clients.slice(5).reduce((s, x) => s + x.t, 0);
+    const clSegs = clOther > 0 ? clTop.concat([{ name: '其他客户', t: +clOther.toFixed(1),
+      share: +(clOther / m.big_t * 100).toFixed(1) }]) : clTop;
+    donut($('#cdonut'), clSegs, $('#cd-v'), n(m.big_t));
+    listify($('#cls'), clSegs);
+
+    const cmpRows = m.channels.slice(0, 4).map((c, i) => ({ name: c.name, t: c.t, share: c.share,
+      col: c.name === '大客户' ? '#d9b878' : PAL[(i + 2) % PAL.length] }));
+    const restT = m.channels.slice(4).reduce((s, x) => s + x.t, 0);
+    if (restT > 0) cmpRows.push({ name: '其他渠道', t: +restT.toFixed(1),
+      share: +(restT / m.t * 100).toFixed(1), col: '#4a6382' });
+    const mxC = Math.max(...cmpRows.map(x => x.t), 1);
+    $('#cmp').innerHTML = cmpRows.map(x => `
+      <div class="row"><span>${x.name}</span>
+        <div class="tr"><div class="fl" style="width:${x.t / mxC * 100}%;background:${x.col}"></div></div>
+        <b>${x.share}%</b></div>`).join('');
+    $('#cmp-t').textContent = `大客户量占全口径 ${m.big_share}%，额占 `
+      + (TAX ? `${m.big_ashare}%（含税）` : '按量口径');
+  } else {
+    vCard(P);
+  }
+
+  // 明细表 + 年度表（按对 / 按站联动）
+  CURM = m; CURP = pairs;
+  syncPchips();
+  detailTable();
+  yearly();
+  pairAnnual();
+}
+
+/* ---------- 历年（不随月份切换，但跟随口径开关） ---------- */
+function yearly() {
+  const Y = D.yearly, ys = Y.years;
+  const L = Y.yp_live || {};
+  const lastMo = Y.done_months[Y.done_months.length - 1];
+  const FULL = SCP === 'full';
+
+  /* 2023 来自公司台账；2024–2026 来自各月日报逐站累计（real_annual）。
+     口径开关在这里同样生效：全口径 = 零售 + 小额，与顶部 KPI、站表合计三处对齐。 */
+  const xiaoOf = (y, mo) => {
+    const k = String(y);
+    if (mo === undefined) return (Y.xiao_annual || {})[k] || 0;
+    const src = (Y.rb_xiao_months || {})[k] || (Y.hist_xiao_months || {})[k];
+    return src ? (src[mo] || 0) : 0;
+  };
+  const annualOf = y => {
+    const k = String(y);
+    let base;
+    if (Y.real_annual && Y.real_annual[k]) base = Y.real_annual[k];
+    else if (k === String(Y.ytd.year)) base = Y.ytd.retail.t;
+    else if (Y.hist_retail_annual && Y.hist_retail_annual[k]) base = Y.hist_retail_annual[k];
+    else base = Y.annual[k] || 0;
+    return FULL ? +(base + xiaoOf(y)).toFixed(1) : base;
+  };
+  /* 逐会计月取数：2024–2026 用日报序列（rb_months），2023 用台账零售序列 */
+  const mval = (y, mo) => {
+    const k = String(y);
+    let base;
+    if (Y.rb_months && Y.rb_months[k] && Y.rb_months[k][mo] !== undefined) base = Y.rb_months[k][mo];
+    else if (Y.hist_retail_months && Y.hist_retail_months[k]) base = Y.hist_retail_months[k][mo] || 0;
+    else base = 0;
+    return FULL ? +(base + xiaoOf(y, mo)).toFixed(1) : base;
+  };
+
+  const mx = Math.max(...ys.map(annualOf), 1);
+  const lastY = ys[ys.length - 1];
+  $('#ytrack').innerHTML = ys.map((y, i) => {
+    const v = annualOf(y), isLast = y === lastY;
+    return `<div class="ycol" style="--i:${i}"><div class="n">${n(v)}</div>
+      <div class="bar ${isLast ? 'now' : ''}" style="height:${Math.max(8, v / mx * 96)}px"></div>
+      <div class="l">${y}${isLast ? '（至 ' + (Y.ytd.as_of || '') + '）' : ''}</div></div>`;
+  }).join('');
+
+  const A23 = annualOf(2023), A24 = annualOf(2024), A25 = annualOf(2025), A26 = annualOf(lastY);
+  const g25 = A24 ? (A25 / A24 - 1) * 100 : null;
+  const sv = Y.ytd.yoy;
+  const fmt = v => v === null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
+  const cls = v => v === null ? '' : (v >= 0 ? 'up' : 'dn');
+  const em = (v, txt) => `<em class="${cls(v)}" style="font-style:normal;font-weight:600">${txt}</em>`;
+
+  $('#y-span').textContent = `${FULL ? '全口径（零售 + 小额配送）' : '仅零售'} · 会计月（26 日→次月 25 日）`;
+  $('#ynote').innerHTML = `<b>年度</b>：2023 年 ${n(A23)} → 2024 年 ${n(A24)} → 2025 年 ${n(A25)} 吨，
+    2025 比 2024 ${em(g25, fmt(g25))}（仅此一处做年度同比，2023、2024 不参与同比）。
+    ${lastY} 年至 ${Y.ytd.as_of || ''} 累计 ${n(A26)} 吨，按同期（1–${lastMo} 月 + ${L.days || 0} 天）
+    比 ${em(sv, fmt(sv))}，不可拿部分年度去比前几年全年数。
+    <br>当前口径：<b>${FULL ? '全口径' : '仅零售'}</b>，切页顶 <code>全口径 / 仅零售</code> 即时重算；
+    2023 年无日报文件，取公司台账（合计 = 零售 + 小额），与 2024 起同源不相斥。`
+    + (FULL ? ` 小额配送：2023 ${n((Y.xiao_annual || {})['2023'] || 0)} 吨 → 2024 ${
+        n((Y.xiao_annual || {})['2024'] || 0)} → 2025 ${n((Y.xiao_annual || {})['2025'] || 0)} → 2026 ${
+        n((Y.xiao_annual || {})['2026'] || 0)} 吨，其中 2024-06～2025-12 源表无该行，属填报缺失而非归零。`
+      : '');
+
+  // 月份对比表：2023 | 2024 | 2025 | 2026（同比仅 2026 vs 2025）
+  const cols = [2023, 2024, 2025, 2026];
+  let h = '<thead><tr><th>会计月</th>'
+    + cols.map(y => `<th class="${y < 2025 ? 'his' : ''}">${y}</th>`).join('')
+    + '<th>同比</th></tr></thead><tbody>';
+  for (let mo = 1; mo <= 12; mo++) {
+    const v = cols.map(y => mval(y, mo));
+    if (!v.some(x => x > 0)) continue;
+    const g = (v[3] && v[2]) ? ((v[3] / v[2] - 1) * 100) : null;
+    h += `<tr><td>${mo} 月</td>`
+      + v.map((x, i) => `<td class="${cols[i] < 2025 ? 'his' : ''}${cols[i] === 2026 && x ? ' now' : ''}">${x ? n(x) : '—'}</td>`).join('')
+      + `<td class="${cls(g)}">${fmt(g)}</td></tr>`;
+  }
+  if (L.days) {
+    const lv = (L.t || 0) + (FULL ? (L.x || 0) : 0);
+    h += `<tr><td>${L.month} 月<span class="tag">实时 ${L.days} 天</span></td>`
+      + `<td class="his">—</td><td class="his">—</td><td>—</td>`
+      + `<td class="now">${n(lv)}</td><td>—</td></tr>`;
+  }
+  h += '</tbody>';
+  $('#ytbl').innerHTML = h;
+}
+
+/* ---------- 各站年度销量（按对 / 按站） ---------- */
+function pairAnnual() {
+  const Y = D.yearly, pa = Y.pair_annual || {}, rd = Y.pair_road || {};
+  const std = Y.station_annual || {}, ps = Y.pair_stations_all || Y.pair_stations || {};
+  const YRS = ['2023', '2024', '2025', '2026'];
+  const FULL = SCP === 'full';
+  // 口径开关同样作用于本表：仅零售时不列小额行，合计即 15 对零售
+  const list = Object.keys(pa).filter(k => FULL || k !== XIAO_NAME).map(k => {
+    const v = pa[k];
+    return {name: k, road: rd[k] || '', v, kind: 'pair', st: ps[k] || [],
+            virtual: k === XIAO_NAME,
+            sum: YRS.reduce((a, y) => a + (v[y] || 0), 0),
+            g: v['2024'] ? (v['2025'] / v['2024'] - 1) * 100 : null};
+  }).sort((a, b) => (b.v['2026'] || 0) - (a.v['2026'] || 0));
+
+  // 全部视角只看 15 对；选定对后才插入该对的分站行（否则一次 45 行，太占屏）
+  const shown = [];
+  list.forEach((r, i) => {
+    if (PSEL && r.name !== PSEL) return;
+    shown.push(Object.assign({}, r, {rank: i + 1}));
+    if (!PSEL) return;
+    r.st.forEach(sn => {
+      const sv = std[sn];
+      if (!sv) return;
+      const v = {'2023': null, '2024': sv['2024'] || 0,
+                 '2025': sv['2025'] || 0, '2026': sv['2026'] || 0};
+      shown.push({name: sn, road: r.road, v, kind: 'st', rank: null,
+                  sum: v['2024'] + v['2025'] + v['2026'],
+                  g: v['2024'] ? (v['2025'] / v['2024'] - 1) * 100 : null});
+    });
+  });
+
+  const hi = 'color:#e8cf95;font-weight:640';
+  const cell = r => y => {
+    const v = r.v[y];
+    return (v === null || v === undefined || !v) ? '—' : n(v);
+  };
+  $('#pann-tb').innerHTML = shown.map(r => {
+    const c = cell(r);
+    return `<tr class="${r.kind === 'st' ? 'sg' : 'ag'}${r.virtual ? ' vx' : ''}">
+      <td>${r.rank ? `<span class="rk ${r.rank <= 3 ? 't' + r.rank : ''}">${r.rank}</span>` : ''}</td>
+      <td>${r.kind === 'pair' ? `<span class="tag">${r.road}</span>` : ''}</td>
+      <td>${r.name}${r.virtual ? '<span class="tag" style="margin-left:6px">公司级</span>' : ''}</td>
+      ${YRS.map(y => `<td style="${y === '2026' ? hi : ''}">${c(y)}</td>`).join('')}
+      <td class="${r.g === null ? '' : (r.g >= 0 ? 'up' : 'dn')}">${r.g === null ? '—'
+        : (r.g >= 0 ? '+' : '') + r.g.toFixed(1) + '%'}</td>
+      <td>${n(r.sum)}</td></tr>`;
+  }).join('')
+    || `<tr><td colspan="9" style="height:64px;text-align:center;color:var(--sub)">暂无数据</td></tr>`;
+
+  // 合计只统计「对」行，避免「对 + 其分站」把同一吨数重复计一遍
+  const foot = shown.filter(r => r.kind === 'pair');
+  const T = YRS.map(y => foot.reduce((a, r) => a + (r.v[y] || 0), 0));
+  const gAll = T[1] ? (T[2] / T[1] - 1) * 100 : null;
+  const nP = foot.filter(r => !r.virtual).length;
+  $('#pann-tf').innerHTML = `<tr><td colspan="3">合计 ${nP} 对${FULL && foot.some(r => r.virtual) ? ' + 小额' : ''}</td>`
+    + T.map((x, i) => `<td style="${i === 3 ? hi : ''}">${n(x)}</td>`).join('')
+    + `<td class="${gAll === null ? '' : (gAll >= 0 ? 'up' : 'dn')}">${gAll === null ? '—'
+      : (gAll >= 0 ? '+' : '') + gAll.toFixed(1) + '%'}</td>`
+    + `<td>${n(T.reduce((a, b) => a + b, 0))}</td></tr>`;
+
+  $('#pann-hint').textContent = `${FULL ? '全口径' : '仅零售'} · 吨 `
+    + (PSEL ? `· ${PSEL}` : '· 按 2026 年降序');
+
+  const baseTop = FULL ? Y.ytd.full.t : Y.ytd.retail.t;
+  const gapTop = +(baseTop - T[3]).toFixed(1);
+  const LG = Y.ledger_retail || {};
+  const d24 = PSEL ? null : (LG['2024'] ? +(T[1] - LG['2024']).toFixed(1) : null);
+  const d25 = PSEL ? null : (LG['2025'] ? +(T[2] - LG['2025']).toFixed(1) : null);
+  const sgn = v => (v >= 0 ? '+' : '') + n(v);
+  const cur = `<em style="font-style:normal;color:#e8cf95">${PSEL}</em>`;
+  $('#pann-note').innerHTML = `<b>口径</b>：${Y.pair_annual_note || ''}`
+    + (PSEL
+      ? `当前按 ${cur} 筛选，合计 ${n(T[3])} 吨；2023 年公司台账只到「对」一级、
+         无分站明细，故分站行 2023 列留空不臆造。`
+      : `2026 列合计 ${n(T[3])} 吨，与顶部「全年累计 ${n(baseTop)} 吨」
+         ${Math.abs(gapTop) < 1 ? '完全一致' : `差 ${sgn(gapTop)} 吨`}。`
+        + (d24 === null ? '' : `与公司台账相比，2024 年${d24 >= 0 ? '多' : '少'}
+           <em class="dn" style="font-style:normal;font-weight:640">${n(Math.abs(d24))}</em> 吨、
+           2025 年${d25 >= 0 ? '多' : '少'}
+           <em class="dn" style="font-style:normal;font-weight:640">${n(Math.abs(d25))}</em> 吨`)
+        + `（逐对差都在几十吨量级，属台账录入微差，非统计错误）。`);
+}
+
+render();
+</script>
+</body>
+</html>
