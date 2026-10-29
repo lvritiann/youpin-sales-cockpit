@@ -166,10 +166,16 @@
   @media (max-width:1140px){ .pdgrid{grid-template-columns:repeat(3,minmax(0,1fr))} }
   @media (max-width:760px){ .pdgrid{grid-template-columns:repeat(2,minmax(0,1fr))} }
   @media (max-width:480px){ .pdgrid{grid-template-columns:minmax(0,1fr)} }
-  /* 1141~1330px 仍保 5 列，但卡会偏窄：值行收 0.5px，保证「合计 106.9t」不被截断 */
+  /* 1141~1330px 仍保 5 列，但卡会偏窄：值行收 0.5px，保证「合计 106.9 吨」不被截断；
+     同时把卡的内边距与图文间距收紧 1~2px，靠「挤空隙」而不是「缩字号」腾出宽度，
+     这样新增的「汽油 510 车次 · 34.94 升/次」两行在 1200px 也不会被切掉（实测 10px 溢出）。 */
   @media (min-width:1141px) and (max-width:1330px){
     .pdv{font-size:11px;letter-spacing:-.25px}
     .pdv .u{font-size:9.5px}
+    .pdc{gap:7px;padding:6px 6px 6px 6px}
+    .pdp{width:42px;height:42px}
+    .pdv .mid{margin:0 2px}
+    .pdv.pdw{letter-spacing:-.4px}
   }
 
   .pdc{display:flex;gap:9px;align-items:flex-start;min-width:0;
@@ -195,6 +201,15 @@
   .pdv .k{color:#849bb2}                              /* 「汽」「柴」「合计」「均价」「车次」「单加」标签 */
   .pdv .sep{color:#3f5570;margin:0 2px}                /* 分隔点 */
   .pdv.pdz{color:#7b93aa}
+  /* 车流分油品两行：色点 + 油品名 + 车次 + 「每次 x 升」（该油品平均单次加注量）。
+     不用斜杠并排 —— 斜杠夹在两个数字中间会被读成一个数（华山产值 11,204.1/7,141.1 就吃过这亏）。 */
+  .pdv.pdw{padding-left:1px}
+  .pdv.pdw i{display:inline-block;width:5px;height:5px;border-radius:50%;
+    vertical-align:1.5px;margin-right:5px;background:#4a6076}
+  .pdv.pdw i.gg{background:#e0b96a}
+  .pdv.pdw i.dd{background:#6fa8e8}
+  .pdv.pdw .k{color:#8ba3bb}
+  .pdv .mid{color:#33485f;margin:0 3px}
   .cols{display:flex;align-items:flex-end;justify-content:center;gap:5px;height:228px;
     flex:none;padding-top:56px;overflow-x:clip;overflow-y:visible}
   .col{flex:1 1 auto;max-width:58px;min-width:9px;height:100%;display:flex;
@@ -270,6 +285,14 @@
   .ci b{font-variant-numeric:tabular-nums;font-weight:640;white-space:nowrap;font-size:11.5px;
     color:var(--ink)}
   .ci u{text-decoration:none;color:var(--sub);font-size:10.5px;width:40px;text-align:right}
+  /* 产值子行：与上面「柴油 / 汽油」吨数行同栅格，缩进 + 降饱和，读成「这一项下面的金额」 */
+  .ci.sub{font-size:11px;padding-left:0;margin-top:-4px}
+  .ci.sub span{color:var(--sub);font-size:10.5px}
+  .ci.sub b{font-size:11px;color:#b9cbdd;font-weight:600}
+  .ci.sub u{font-size:9.5px}
+  .ci.tot{margin-top:3px;padding-top:7px;border-top:1px dashed var(--line)}
+  .ci.tot span{color:var(--ink2);font-weight:600}
+  .ci.tot b{color:var(--gold2);font-size:12px}
   .cmp{margin-top:14px;padding-top:13px;border-top:1px dashed var(--line)}
   .cmp .ttl{font-size:10.5px;color:var(--sub);margin-bottom:10px}
   .cmp .row{display:grid;grid-template-columns:74px 1fr 54px;gap:11px;align-items:center;
@@ -378,9 +401,12 @@
   .pb.cur .nm{color:var(--gold2);font-weight:640}
   .pb .nm s.go{cursor:pointer;color:#5b7fa8;transition:color .15s}
   .pb .nm s.go:hover{color:var(--gold2)}
-  /* 单站消费结构：柴汽环形 + 渠道 vs 公司基准 + 分站对比 */
-  .vstruct{display:grid;grid-template-columns:206px minmax(0,1fr) minmax(0,1fr);
-    gap:24px;align-items:start}
+  /* 单站消费结构：柴汽环形 + 渠道 vs 公司基准 + 分站对比
+     ★ 第一列必须放得下「环形 128 + 间距 14 + 明细列 ~170」，原 206px 只够环形，
+       明细会被挤到第二列底下、和「大客户」等渠道名叠在一起（2026-10-29 实测）。
+       故第一列定 340px；≤1000px 直接整块竖排，不给中间态留夹缝。 */
+  .vstruct{display:grid;grid-template-columns:340px minmax(0,1fr) minmax(0,1fr);
+    gap:22px;align-items:start}
   .vstruct .vt{font-size:10.5px;color:var(--sub);margin-bottom:10px;display:flex;
     justify-content:space-between;align-items:baseline;gap:8px}
   .vstruct .vt b{color:var(--ink2);font-weight:600}
@@ -410,7 +436,7 @@
   .vsub .vs1 .bar2{height:6px;border-radius:3px;background:#152338;overflow:hidden;margin:7px 0 6px}
   .vsub .vs1 .bar2 i{display:block;height:100%;border-radius:3px;
     background:linear-gradient(90deg,#2b6fa8,#c9a45c)}
-  @media (max-width:900px){ .vstruct{grid-template-columns:1fr;gap:18px} }
+  @media (max-width:940px){ .vstruct{grid-template-columns:1fr;gap:18px} }
 
   /* ---------- 双表并排：把两张「过大」的表压到半宽 + 限高滚动 ---------- */
   .tb2{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -1467,24 +1493,31 @@ function vCard(P) {
   ];
   const dAmt = TAX ? P.damt : P.dwan;
   const gAmt = TAX ? P.gamt : P.gwan;
+  /* 合计产值：柴 + 汽（各自已在 build 端取 1 位），保证「两行相加 = 合计」自洽，
+     且与顶部 KPI「产值金额」同一口径同一数值。 */
+  const tAmt = +(((dAmt || 0) + (gAmt || 0)).toFixed(1));
   const base = P.chan_base || {};
   const rows = (P.chan || []).slice(0, 8);
   const mx = Math.max(...rows.map(x => x.share), 1);
 
   box.innerHTML = `
     <div>
-      <div class="vt">柴汽结构 <em>${TAX ? '含税' : '不含税'} · 万元</em></div>
+      <div class="vt" style="justify-content:flex-start;gap:7px">柴汽结构
+        <em title="吨 = 销量（吨）；万元 = 产值（${TAX ? '含税' : '不含税'}销售额）">· ${TAX ? '含税' : '不含税'}</em></div>
       <div class="donut-wrap" style="gap:14px;align-items:flex-start">
         <div class="donut" style="width:128px;height:128px">
           <svg viewBox="0 0 42 42" id="vdonut"></svg>
           <div class="ctr"><b style="font-size:15px">${n(t)}</b><span>累计 吨</span></div>
         </div>
         <div class="clist" style="gap:7px">
-          <div class="ci"><i style="background:#3f8fd0"></i><span>柴油</span><b>${n(P.diesel)}</b><u>${segs[0].share}%</u></div>
-          <div class="ci"><i style="background:#d9b878"></i><span>汽油</span><b>${n(P.gas)}</b><u>${segs[1].share}%</u></div>
-          <div class="ci" style="margin-top:4px;padding-top:6px;border-top:1px dashed var(--line)">
-            <i style="background:transparent"></i><span>柴汽产值</span>
-            <b>${n(dAmt)} / ${n(gAmt)}</b><u>万元</u></div>
+          <div class="ci" title="柴油销量 ${n(P.diesel)} 吨，占本站 ${segs[0].share}%"><i style="background:#3f8fd0"></i><span>柴油</span><b>${n(P.diesel)} t</b><u>${segs[0].share}%</u></div>
+          <div class="ci sub" title="柴油产值 ${n(dAmt)} 万元（${TAX ? '含税' : '不含税'}），占本站总产值 ${tAmt > 0 ? (dAmt / tAmt * 100).toFixed(1) : '—'}%">
+            <i style="background:transparent"></i><span>产值</span><b>${n(dAmt)}</b><u>万元</u></div>
+          <div class="ci" title="汽油销量 ${n(P.gas)} 吨，占本站 ${segs[1].share}%"><i style="background:#d9b878"></i><span>汽油</span><b>${n(P.gas)} t</b><u>${segs[1].share}%</u></div>
+          <div class="ci sub" title="汽油产值 ${n(gAmt)} 万元（${TAX ? '含税' : '不含税'}），占本站总产值 ${tAmt > 0 ? (gAmt / tAmt * 100).toFixed(1) : '—'}%">
+            <i style="background:transparent"></i><span>产值</span><b>${n(gAmt)}</b><u>万元</u></div>
+          <div class="ci tot" title="柴油产值 ${n(dAmt)} + 汽油产值 ${n(gAmt)} = ${n(tAmt)} 万元">
+            <i style="background:transparent"></i><span>合计产值</span><b>${n(tAmt)}</b><u>万元</u></div>
         </div>
       </div>
     </div>
@@ -1621,34 +1654,52 @@ function pdCard(it, rs) {
   const pTxt = (v) => v == null ? '—' : v.toFixed(2);
   const sep = '<span class="sep">·</span>';
   return `<div class="pdc${zero ? ' zero' : ''}${it.name === '小额配送' ? ' vx' : ''}"`
-    + ` title="${it.name}　汽 ${gTxt}t / 柴 ${dTxt}t / 合计 ${sumTxt}t`
-    + `　平均单价 汽${pTxt(it.gp)} 柴${pTxt(it.dp)} 元/L`
-    + (hasFlow ? `　前一日总车次 ${it.fv}（汽 ${it.fg} / 柴 ${it.fd}）`
-      + `　平均单加 汽 ${it.fsp} / 柴 ${it.fdp} 升/次` : '　无车流数据') + `">`
+    + ` title="${it.name}`
+    + `&#10;销量：汽油 ${gTxt} 吨 · 柴油 ${dTxt} 吨 · 合计 ${sumTxt} 吨`
+    + `&#10;平均单价：汽油 ${pTxt(it.gp)} 元/升 · 柴油 ${pTxt(it.dp)} 元/升`
+    + (hasFlow
+        ? `&#10;前一日车流：共 ${_i0(it.fv)} 车次 = 汽油 ${_i0(it.fg)} 车次 + 柴油 ${_i0(it.fd)} 车次`
+          + `&#10;平均每次加注：汽油 ${it.fsp == null ? '—' : it.fsp} 升 · 柴油 ${it.fdp == null ? '—' : it.fdp} 升`
+        : `&#10;前一日车流：无数据`) + `">`
     + `<svg class="pdp" viewBox="0 0 44 44">${pdPie(un ? [] : vals, rs.it.map(s => s.c))}</svg>`
     + '<div class="pdm">'
     +   `<div class="pdn"><span class="nm">${it.name}</span><span class="pdr">${rt}</span></div>`
-    // ① 分油品吨 + 合计吨（单位只在行尾出一次，省出宽度给「合计」；不再用 · 分隔）
+    // ① 分油品吨 + 合计吨（单位只在行尾出一次，省出宽度给「合计」）
     +   `<div class="pdv"><span class="k">汽</span><span class="gg">${gTxt}</span>`
     +     ` <span class="k">柴</span><span class="dd">${dTxt}</span>`
-    +     ` <span class="k">合计</span><b>${sumTxt}</b>`
-    +     `<span class="u">t</span>${un ? '<span class="u"> 未拆</span>' : ''}</div>`
-    // ② 平均单价（元/升，加权 = 金额÷升数）
-    +   `<div class="pdv"><span class="k">均价</span>`
-    +     `<span class="gg">${pTxt(it.gp)}</span> / <span class="dd">${pTxt(it.dp)}</span>`
-    +     `<span class="u"> 元/L</span></div>`
-    // ③ 前一日总车次（汽/柴车次拆分）
-    +   `<div class="pdv pdz"><span class="k">车次</span>`
+    +     ` <span class="k">合计</span> <b>${sumTxt}</b>`
+    +     `<span class="u"> 吨</span>${un ? '<span class="u"> 未拆</span>' : ''}</div>`
+    // ② 平均单价（元/升，加权 = 金额÷升数）；「汽」「柴」紧贴各自单价，读成「汽油 8.68」
+    +   `<div class="pdv"><span class="k">均价</span> `
+    +     `<span class="k">汽</span><span class="gg">${pTxt(it.gp)}</span>`
+    +     `<span class="mid">·</span>`
+    +     `<span class="k">柴</span><span class="dd">${pTxt(it.dp)}</span>`
+    +     `<span class="u"> 元/升</span></div>`
+    // ③ 前一日车流：总车次一行，汽油 / 柴油各一行
+    //    ★ 原先写成「车次 296 汽162 / 柴134」「单加 33.05 / 235.39 L/次」，
+    //      两个数值用斜杠并排、又跨行错开，谁属汽油谁属柴油完全看不出来（用户 2026-10-29 指出）。
+    //      改为按油品分行，每行自带色点与油品名，「每次 x 升」= 该油品平均单次加注量。
+    +   `<div class="pdv pdz"><span class="k">车流</span> `
     +     (hasFlow
-          ? `<b>${_i0(it.fv)}</b> <span class="gg">汽${_i0(it.fg)}</span> / <span class="dd">柴${_i0(it.fd)}</span>`
-          : '— <span class="u">无车流</span>')
+          ? `<b>${_i0(it.fv)}</b><span class="u"> 车次</span>`
+          : `<span class="u">无车流数据</span>`)
     +   `</div>`
-    // ④ 平均单加（升/次）
-    +   `<div class="pdv pdz"><span class="k">单加</span>`
+    +   `<div class="pdv pdw">`
     +     (hasFlow
-          ? `<span class="gg">${it.fsp == null ? '—' : it.fsp}</span> / <span class="dd">${it.fdp == null ? '—' : it.fdp}</span>`
-          : '—')
-    +     `<span class="u"> L/次</span></div>`
+          ? `<i class="gg"></i><span class="k">汽油</span> <span class="gg">${_i0(it.fg)}</span>`
+            + `<span class="u"> 车次</span><span class="mid">·</span>`
+            + `<span class="gg">${it.fsp == null ? '—' : it.fsp}</span>`
+            + `<span class="u"> 升/次</span>`
+          : `<i></i><span class="k">汽油</span> <span class="u">—</span>`)
+    +   `</div>`
+    +   `<div class="pdv pdw">`
+    +     (hasFlow
+          ? `<i class="dd"></i><span class="k">柴油</span> <span class="dd">${_i0(it.fd)}</span>`
+            + `<span class="u"> 车次</span><span class="mid">·</span>`
+            + `<span class="dd">${it.fdp == null ? '—' : it.fdp}</span>`
+            + `<span class="u"> 升/次</span>`
+          : `<i></i><span class="k">柴油</span> <span class="u">—</span>`)
+    +   `</div>`
     + '</div></div>';
 }
 
