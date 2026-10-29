@@ -827,6 +827,9 @@ payload = {'meta': {'generated': (datetime.datetime.utcnow() + datetime.timedelt
 _FLOW = {}
 _FLOW_NOTE = ''
 _FLOW_Asof = ''
+_FLOW_BASIS = ''
+_FLOW_CHK = {}
+_FLOW_ROW = []
 _fp = os.path.join(BASE, '_flow.json')
 if os.path.exists(_fp):
     try:
@@ -834,6 +837,9 @@ if os.path.exists(_fp):
         _FLOW = _fj.get('stations') or {}
         _FLOW_NOTE = _fj.get('note') or ''
         _FLOW_Asof = _fj.get('asof') or ''
+        _FLOW_BASIS = _fj.get('basis') or ''
+        _FLOW_CHK = _fj.get('check') or {}
+        _FLOW_ROW = _fj.get('rows') or []
     except Exception as _e:
         print('[warn] _flow.json 解析失败，车流/单加留空：', _e)
 
@@ -867,9 +873,11 @@ if _pd_day:
         _f = _FLOW.get(_pn) or {}
         _pd_items.append({
             'name': _pn,
-            't': round(_a['t'], 1),
-            'g': round(_a['gas'], 2),      # 汽油吨
-            'd': round(_a['diesel'], 2),   # 柴油吨
+            # ★ 三者统一到 1 位小数后再相加：卡片上「汽 + 柴 = 合计」必须自洽，
+            #   否则 19.83/70.33 显示成 19.8+70.3=90.1 而合计写 90.2，会被当成算错。
+            'g': round(_a['gas'], 1),      # 汽油吨
+            'd': round(_a['diesel'], 1),   # 柴油吨
+            't': round(round(_a['gas'], 1) + round(_a['diesel'], 1), 1),
             't92': round(_a['t92'], 2), 't95': round(_a['t95'], 2),
             't0': round(_a['t0'], 2), 't10': round(_a['t10'], 2),
             'gL': round(_a['gL'], 1), 'dL': round(_a['dL'], 1),
@@ -877,11 +885,11 @@ if _pd_day:
             'dp': _price(_a['dA'], _a['dL']),   # 柴油单价 元/升
             'gpt': _price(_a['gA'], _a['gas']),  # 元/吨
             'dpt': _price(_a['dA'], _a['diesel']),
-            'fv': _f.get('v'),             # 日均车次
-            'fg': _f.get('vg'), 'fd': _f.get('vd'),
+            'fv': _f.get('iv'),            # 前一日实报总车次（不是日均）
+            'fg': _f.get('ig'), 'fd': _f.get('id'),
             # 单加升数 汽/柴（保留 1 位，窄条里再长就显示不下）
-            'fsp': (round(_f['gp'], 1) if _f.get('gp') is not None else None),
-            'fdp': (round(_f['dp'], 1) if _f.get('dp') is not None else None),
+            'fsp': _f.get('isp'),
+            'fdp': _f.get('idp'),
         })
         for k in _pd_sum:
             _pd_sum[k] += _a[k]
@@ -902,13 +910,14 @@ prev_day = {
     'label': LAST_DT.strftime('%m-%d') if LAST_DT else '',
     'items': _pd_items,
     'xiao': _pd_x,
-    # 合计用未取整的原始值算，避免「15 对合计」与「汽+柴」各差 0.2 的观感问题
-    'total': round(_pd_sum['t'] + (_pd_x or 0), 1),
+    # 合计一律走「卡片上已取整的汽+柴」逐项相加，保证 15 对合计 == 汽油合计 + 柴油合计；
+    # 不用 _pd_sum 的原始值，那会和卡片分项差 0.1，被当成算错。
+    'total': round(sum(x['t'] for x in _pd_items) + (_pd_x or 0), 1),
     # 窄条用：全公司口径的柴汽量与均价（合计行显示比价用）
     'sum': {
-        't': round(_pd_sum['t'], 1),
-        'g': round(_pd_sum['gas'], 1),
-        'd': round(_pd_sum['diesel'], 1),
+        't': round(sum(x['t'] for x in _pd_items), 1),
+        'g': round(sum(x['g'] for x in _pd_items), 1),
+        'd': round(sum(x['d'] for x in _pd_items), 1),
         'gp': _price(_pd_sum['gA'], _pd_sum['gL']),
         'dp': _price(_pd_sum['dA'], _pd_sum['dL']),
     },
@@ -916,6 +925,12 @@ prev_day = {
     'xiao_item': _xiao_item,
     'flow_note': _FLOW_NOTE,
     'flow_asof': _FLOW_Asof,
+    'flow_basis': _FLOW_BASIS,          # 「前一日实报」
+    'flow_check': _FLOW_CHK,            # 15 对加总（公司级对账用）
+    'flow_rows': _FLOW_ROW,             # 今日填报取的行号 [613, 614]
+    # 15 对前一日车次合计（小额无车流，不计）；优先用 flow_sync 算好的对账值
+    'flow_veh': (_FLOW_CHK.get('veh') if _FLOW_CHK
+                 else (sum(int(x.get('fv') or 0) for x in _pd_items) if _FLOW else None)),
 }
 payload['prev_day'] = prev_day
 
