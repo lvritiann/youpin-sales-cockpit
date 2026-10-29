@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """驾驶舱 v2：会计月切换 + 多月趋势 + 历年同比"""
-import json, os, datetime
+import json, os, re, datetime
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(BASE)
@@ -25,6 +25,73 @@ SER = json.load(open(os.path.join(ARCH, 'station_series.json'), encoding='utf-8'
 # 可拆柴汽、可比同比。这样「零售」与「全口径」的差异由一行数据直接体现，
 # 不再依赖一句口头口径说明。
 XIAO = '小额配送'
+
+
+# ==================== 会计月 / 会计年：全部从数据推导，绝不写死 ====================
+# 会计月：26 日 → 次月 25 日，标签取「止月」（2026-11 = 2026-10-26 ~ 2026-11-25）。
+# 会计年：标签的年份。所以 2026 会计年 = 会计月 2026-01 ~ 2026-12
+#        = 2025-12-26 ~ 2026-12-25 —— 每年 12 月 26 日进入下一个会计年。
+# ★ 这一天填报簿清表、上一年度收口，是页面必须做到「外界无感」的关键时刻：
+#   2026 会计年在此冻结为完整 12 个月，2027 会计年从 0 起算，两者互不污染。
+
+
+def acct_span(label):
+    """会计月标签 -> (起始日, 止日, 应有天数)。
+       '2026-11' → 2026-10-26 ~ 2026-11-25（31 天）；
+       '2026-01' → 2025-12-26 ~ 2026-01-25（起始要跨年回到上一年 12 月）。"""
+    y, m = int(label[:4]), int(label[5:7])
+    end = datetime.date(y, m, 25)
+    sy, sm = (y - 1, 12) if m == 1 else (y, m - 1)
+    start = datetime.date(sy, sm, 26)
+    return start, end, (end - start).days + 1
+
+
+def acct_range_txt(label):
+    """'2026-10-26 ~ 11-25' —— 起点带年、止点省年，沿用既有文案风格"""
+    s, e, _ = acct_span(label)
+    return '%s ~ %02d-%02d' % (s.isoformat(), e.month, e.day)
+
+
+def acct_name(label):
+    return '%d月会计月' % int(label[5:7])
+
+
+def _parse_span_txt(s):
+    """从 '2026-10-26 ~ 2026-11-25' 这类文案里抠出两个日期"""
+    m = re.search(r'(\d{4})-(\d{1,2})-(\d{1,2})\s*[~～\-–—至]+\s*'
+                  r'(\d{4})-(\d{1,2})-(\d{1,2})', s or '')
+    if not m:
+        return None, None
+    g = [int(x) for x in m.groups()]
+    return datetime.date(g[0], g[1], g[2]), datetime.date(g[3], g[4], g[5])
+
+
+def parse_cur_acct(meta):
+    """当前会计月标签。优先读 data.json 的 accounting_month，
+       缺失时按「今天」推（>=26 号落在下月会计月）。"""
+    a, b = _parse_span_txt((meta or {}).get('accounting_month'))
+    if b is None:
+        t = datetime.date.today()
+        if t.day >= 26:
+            y, mo = (t.year + 1, 1) if t.month == 12 else (t.year, t.month + 1)
+        else:
+            y, mo = t.year, t.month
+        a, b, _ = acct_span('%04d-%02d' % (y, mo))
+    return '%04d-%02d' % (b.year, b.month), a, b, (b - a).days + 1
+
+
+CUR_LABEL, CUR_START, CUR_END, CUR_EXPECT = parse_cur_acct(CUR.get('meta'))
+CUR_NO = int(CUR_LABEL[5:7])
+# 会计年 = 会计月标签的年份；上一年用于同比基数
+CUR_Y = int(CUR_LABEL[:4])
+PRE_Y = CUR_Y - 1
+# 年度对比窗口：最近 4 个会计年（含当前），跨年自动滚动。
+# 2026 年时是 2023–2026；12-26 进入 2027 后自动变 2024–2027，无需改代码。
+YRS4 = [CUR_Y - 3, CUR_Y - 2, CUR_Y - 1, CUR_Y]
+YRS4_S = [str(y) for y in YRS4]
+# 2023 是特例：没有日报文件，只能取公司台账（自然月、零售口径）。
+# 它只在窗口内时才参与；滚出窗口后所有相关分支自然跳过。
+HAS_2023 = 2023 in YRS4
 
 
 def _acc(ym_list, sts, key):
@@ -84,11 +151,6 @@ def fix_road(sts):
         s['road'] = r if (r and r not in ('None', 'none', 'null')) else ROADMAP.get(s.get('name'), '')
     return sts
 
-RANGE = {'2026-09': '2026-08-26 ~ 09-25', '2026-10': '2026-09-26 ~ 10-25',
-         '2026-11': '2026-10-26 ~ 11-25'}
-NAME = {'2026-09': '9月会计月', '2026-10': '10月会计月', '2026-11': '11月会计月'}
-
-
 def pack_month(mkey, raw):
     T = raw.get('total', raw)
     t = T.get('t', 0)
@@ -115,8 +177,9 @@ def pack_month(mkey, raw):
         c['share'] = round(c['l'] / sum(x['l'] for x in cl) * 100, 1) if cl else 0
     ba = sum(c['amt'] for c in cl)
     return {
-        'key': mkey, 'name': NAME.get(mkey, mkey), 'range': RANGE.get(mkey, ''),
-        'partial': mkey == '2026-11',
+        'key': mkey, 'name': acct_name(mkey), 'range': acct_range_txt(mkey),
+        # partial = 「还没走完的会计月」。只有当前会计月才算，历史月恒为完整。
+        'partial': mkey == CUR_LABEL,
         't': round(t, 1), 'diesel': round(T.get('diesel', 0), 1),
         'gas': round(T.get('gas', 0), 1), 'amt': round(T.get('amt', 0), 1),
         'wan': round(T.get('wan', 0), 1), 'days': T.get('days', len(raw.get('daily', []))),
@@ -140,48 +203,163 @@ months = {}
 for mk, v in HM.items():
     months[mk] = pack_month(mk, v)
 
-# 当前月（kdocs 实时）
-cur_days = [d for d in CUR['sale'] if CUR['sale'][d]['t'] > 1]
-cur_t = sum(CUR['sale'][d]['t'] for d in cur_days)
-cur_amt = sum(CUR['sale'][d]['amt'] for d in cur_days) / 1e4
-cur_wan = sum(CUR['sale'][d]['wan'] for d in cur_days)
-stc, chc, clc = {}, {}, {}
-for d in cur_days:
-    for n, v in CUR['sale'][d]['stations'].items():
-        a = stc.setdefault(n, dict(name=n, road=v['road'], t=0, diesel=0, gas=0, amt=0, wan=0))
-        a['t'] += v['t']; a['amt'] += v['amt'] / 1e4; a['wan'] += v['wan']
-        a['diesel'] += v['diesel']; a['gas'] += v['gas']
-    for c, dd in CUR['channels'].items():
-        if d in dd:
-            x = chc.setdefault(c, dict(t=0, amt=0, wan=0))
-            x['t'] += sum(y['t'] for y in dd[d].values())
-            x['amt'] += sum(y['amt'] for y in dd[d].values()) / 1e4
-            x['wan'] += sum(y.get('wan', 0) for y in dd[d].values())
-    for stn, rec in CUR['bigcust'].get('大客户明细', {}).get(d, {}).items():
-        for cn, y in rec['c'].items():
-            x = clc.setdefault(cn, dict(name=cn, l=0, amt=0))
-            x['l'] += y['l']; x['amt'] += y['amt']
-for x in clc.values():
-    x['t'] = round(x['l'] * 0.83 / 1000, 1)
-    x['amt'] = round(x['amt'] / 1e4, 2)
-months['2026-11'] = pack_month('2026-11', {
-    't': cur_t, 'diesel': sum(CUR['sale'][d]['diesel'] for d in cur_days),
-    'gas': sum(CUR['sale'][d]['gas'] for d in cur_days),
-    'amt': cur_amt, 'wan': cur_wan, 'days': len(cur_days),
-    'stations': list(stc.values()), 'channels': chc, 'clients': list(clc.values()),
-    'xiao': {'t': round(sum(CUR['sale'][d].get('xiao', {}).get('t', 0) for d in cur_days), 2),
-             'amt': round(sum(CUR['sale'][d].get('xiao', {}).get('amt', 0) for d in cur_days) / 1e4, 2),
-             'wan': round(sum(CUR['sale'][d].get('xiao', {}).get('wan', 0) for d in cur_days), 2)},
-    'daily': [{'d': d, 't': round(CUR['sale'][d]['t'], 1),
-               'diesel': round(CUR['sale'][d]['diesel'], 1),
-               'gas': round(CUR['sale'][d]['gas'], 1),
-               'amt': round(CUR['sale'][d]['amt'] / 1e4, 1),
-               'wan': round(CUR['sale'][d]['wan'], 1),
-               'xt': round(CUR['sale'][d].get('xiao', {}).get('t', 0), 1),
-               'lab': ('10-%02d' % int(d)) if int(d) >= 26 else ('11-%02d' % int(d))}
-              for d in sorted(cur_days, key=lambda x: int(x))],
-    'sources': ['kdocs'],
-})
+
+def acct_date(mkey, dayno):
+    """会计月 key + 日号 -> 真实日期（>=26 落上月，<26 落本月）。
+
+       ★ 必须容错：源表恒有 31 个日块、日号硬排 1..31，但小月没有 31 号
+         （11 月、2 月、4/6/9 月），硬转 date() 会抛 'day is out of range'。
+         返回 None 让调用方退回原始日号，绝不因为一个空块炸掉整页。"""
+    y, m = (int(x) for x in mkey.split('-'))
+    if dayno >= 26:
+        yy, mm = (y - 1 if m == 1 else y), ((m - 1) or 12)
+    else:
+        yy, mm = y, m
+    try:
+        return datetime.date(yy, mm, dayno)
+    except ValueError:
+        return None
+
+
+def pack_from_payload(mkey, P):
+    """从一份 data.json 结构（当前月实时 / 归档 payload）算出月份对象。
+
+       ★ 两条路径共用这一个函数，是为了保证「实时月」和「归档月」算出来的数
+         完全一致 —— 否则清表后切到归档那天，页面数字会莫名跳一下。"""
+    S = (P.get('sale') or {})
+    days = [d for d in S if (S[d] or {}).get('t', 0) > 1]
+    if not days:
+        return None
+    st, ch, cl = {}, {}, {}
+    for d in days:
+        for n, v in (S[d].get('stations') or {}).items():
+            a = st.setdefault(n, dict(name=n, road=v.get('road'), t=0,
+                                      diesel=0, gas=0, amt=0, wan=0))
+            a['t'] += v['t']; a['amt'] += v['amt'] / 1e4; a['wan'] += v['wan']
+            a['diesel'] += v['diesel']; a['gas'] += v['gas']
+        for c, dd in (P.get('channels') or {}).items():
+            if d in dd:
+                x = ch.setdefault(c, dict(t=0, amt=0, wan=0))
+                x['t'] += sum(y['t'] for y in dd[d].values())
+                x['amt'] += sum(y['amt'] for y in dd[d].values()) / 1e4
+                x['wan'] += sum(y.get('wan', 0) for y in dd[d].values())
+        for _stn, rec in ((P.get('bigcust') or {}).get('大客户明细') or {}).get(d, {}).items():
+            for cn, y in (rec.get('c') or {}).items():
+                x = cl.setdefault(cn, dict(name=cn, l=0, amt=0))
+                x['l'] += y['l']; x['amt'] += y['amt']
+    for x in cl.values():
+        x['t'] = round(x['l'] * 0.83 / 1000, 1)
+        x['amt'] = round(x['amt'] / 1e4, 2)
+
+    def _lab(d):
+        # ★ 日柱标签用真实月-日，跟着会计月走。原来写死 '10-%02d'/'11-%02d'，
+        #   一翻月（11-26）就全错，跨年更错。
+        #   小月没有 31 号时 acct_date 返 None，退回原始日号，不崩。
+        dt = acct_date(mkey, int(d))
+        return ('%02d-%02d' % (dt.month, dt.day)) if dt else str(d)
+
+    _pk = pack_month(mkey, {
+        't': sum(S[d]['t'] for d in days),
+        'diesel': sum(S[d].get('diesel', 0) for d in days),
+        'gas': sum(S[d].get('gas', 0) for d in days),
+        'amt': sum(S[d].get('amt', 0) for d in days) / 1e4,
+        'wan': sum(S[d].get('wan', 0) for d in days),
+        'days': len(days),
+        'stations': list(st.values()), 'channels': ch, 'clients': list(cl.values()),
+        'xiao': {'t': round(sum(S[d].get('xiao', {}).get('t', 0) for d in days), 2),
+                 'amt': round(sum(S[d].get('xiao', {}).get('amt', 0) for d in days) / 1e4, 2),
+                 'wan': round(sum(S[d].get('xiao', {}).get('wan', 0) for d in days), 2)},
+        'daily': [{'d': d, 't': round(S[d]['t'], 1),
+                   'diesel': round(S[d].get('diesel', 0), 1),
+                   'gas': round(S[d].get('gas', 0), 1),
+                   'amt': round(S[d].get('amt', 0) / 1e4, 1),
+                   'wan': round(S[d].get('wan', 0), 1),
+                   'xt': round(S[d].get('xiao', {}).get('t', 0), 1),
+                   'lab': _lab(d)}
+                  for d in sorted(days, key=lambda x: int(x))],
+        'sources': ['kdocs'] if mkey == CUR_LABEL else ['archive'],
+    })
+    # 高精度金额（万元）：pack_month 的月级 amt/wan 统一取 1 位小数，
+    # 直接拿它做年度累加会在 KPI 上冒出 0.1 万元的舍入差（实测差过）。
+    # 这两个字段只供累加用，不上前端。
+    _pk['amt2'] = round(sum(S[d].get('amt', 0) for d in days) / 1e4, 2)
+    _pk['wan2'] = round(sum(S[d].get('wan', 0) for d in days), 2)
+    return _pk
+
+
+# ---------- 归档月：把 _archive/monthly/*.json 的完整快照补进 months ----------
+# 为什么必须有这一步：填报簿每月 26 号清表，清表后 data.json 只剩新会计月头几天。
+# 清表前的整月数据只活在 _archive/monthly/<会计月>.json 里 —— 不合并进来的话，
+# 驾驶舱的月份表会从 31 天塌成 1 天（2026-10-29 实测确认过）。
+# 合并后：历史月恒为「归档那天的完整态」，永不随清表缩水，外界完全感知不到清表发生。
+ARCH_DIR = os.path.join(ARCH, 'monthly')
+
+
+def load_archives():
+    out = {}
+    if not os.path.isdir(ARCH_DIR):
+        print('（未找到 _archive/monthly/ —— 归档月合并跳过）')
+        return out
+    for fn in sorted(os.listdir(ARCH_DIR)):
+        if not fn.endswith('.json'):
+            continue
+        try:
+            r = json.load(open(os.path.join(ARCH_DIR, fn), encoding='utf-8'))
+        except Exception:
+            continue
+        lab = r.get('acct') or fn[:-5]
+        if not re.match(r'^\d{4}-\d{2}$', lab or ''):
+            continue
+        if not (r.get('payload') or {}).get('sale'):
+            continue
+        out[lab] = r
+    return out
+
+
+ARC = load_archives()
+for _lab, _r in ARC.items():
+    if _lab in months:
+        continue                       # HM/MC 已有的历史月是权威静态，不覆盖
+    _mo = pack_from_payload(_lab, _r['payload'])
+    if _mo:
+        _mo['archived'] = True
+        _mo['arch_days'] = _r.get('days_count')
+        months[_lab] = _mo
+
+# ---------- 当前会计月（kdocs 实时）----------
+_cur_mo = pack_from_payload(CUR_LABEL, CUR)
+if _cur_mo:
+    _prev = months.get(CUR_LABEL)
+    # ★ 防回退：同一个月里，归档天数 > 实时天数时保留归档。
+    #   典型场景 —— 25 号已归档 31 天完整，26 号清表后 data.json 只剩 1 天；
+    #   若放任实时覆盖，页面就会从 31 天塌成 1 天，正是要根治的那个 bug。
+    #   ★ 只在「天数真的更少」时才拦。不能因为归档带 archived 标记就无条件保留 ——
+    #     归档每天都在写，那样会让实时更新永远进不来。
+    if _prev and (_prev.get('days') or 0) > (_cur_mo.get('days') or 0):
+        _prev['archived'] = True       # 留归档那份，标记一下便于排错
+    else:
+        months[CUR_LABEL] = _cur_mo
+elif CUR_LABEL not in months:
+    months[CUR_LABEL] = pack_month(CUR_LABEL, {
+        't': 0, 'stations': [], 'channels': {}, 'clients': [], 'daily': []})
+
+
+# ---------- 归档月补进年度序列 YRB ----------
+# months_cum.json 是本地脚本产出的静态文件，只到某个截止月（当前是 202610）。
+# 那之后的会计月靠归档滚进来，否则「年度累计」永远缺最后几个月 ——
+# 12-26 跨年时，2026 会计年就会显示成只有 1~10 月，少了 11、12 两个月。
+for _lab, _rr in ARC.items():
+    _y, _mm = _lab.split('-')
+    if str(int(_mm)) in YRB.get(_y, {}):
+        continue                       # MC 已有该月，静态权威优先，不覆盖
+    _mo = months.get(_lab)
+    if not _mo or not (_mo.get('days') or 0):
+        continue
+    YRB.setdefault(_y, {})[str(int(_mm))] = {
+        'm_retail': _mo['t'], 'm_diesel': _mo['diesel'], 'm_gas': _mo['gas'],
+        'm_xiao': _mo.get('xt') or 0,
+        'm_total': round(_mo['t'] + (_mo.get('xt') or 0), 2),
+    }
 
 # ---- 每月补小额配送的分品类吨（pack_month 的 xiao 只有总量，表格要拆柴汽） ----
 # 数据源同 SER，与「小额配送」实体的口径完全一致；11 月源表未拆 → 留 0 不臆造。
@@ -191,14 +369,7 @@ for _mk, _mob in months.items():
     _mob['xg'] = round(float(_xr.get('g') or 0), 1)
 
 # ---- 日销量滚动窗口：按真实日期倒推最近 N 天，跨会计月拼接 ----
-def acct_date(mkey, dayno):
-    """会计月 key + 日号 -> 真实日期（>=26 落上月，<26 落本月）"""
-    y, m = (int(x) for x in mkey.split('-'))
-    if dayno >= 26:
-        return datetime.date(y - 1 if m == 1 else y, (m - 1) or 12, dayno)
-    return datetime.date(y, m, dayno)
-
-
+# （acct_date 已上移到 pack_from_payload 之前定义，两边共用同一套日期换算）
 BYDATE = {}
 for _mk, _m in months.items():
     for _d in _m['daily']:
@@ -234,7 +405,9 @@ if LAST_DT:
         }
 
 # ---- 历年 ----
-yrs = YE['years']
+# ★ 年份窗口用 YRS4，不再取 history_yearly.json 的静态 years ——
+#   那个文件只到制作那年，跨年后新年度进不来，年度条形图会一直缺最新一年。
+yrs = YRS4_S
 yearly = {
     'years': yrs,
     'annual': {str(y): round(YE['annual'].get('合计', {}).get(str(y), {}).get('total', 0), 1)
@@ -247,16 +420,28 @@ yearly = {
                     for y in yrs},
     'st_ytd': {},
 }
-# 站级 2026 累计 vs 2025 同期（仅有数据月份）
-done = [m for m in range(1, 13) if YE['months'][str(m)].get('合计', {}).get('2026', {}).get('total', 0) > 0]
+# 站级当年累计 vs 去年同期（仅有数据月份）
+# 注意 history_yearly.json 是静态文件、只到制作那年；跨年后它没有新年度的月表，
+# done 会为空 → st_ytd 为空。所以下面用 months（含归档+实时）兜一层。
+done = [m for m in range(1, 13)
+        if YE['months'][str(m)].get('合计', {}).get(str(CUR_Y), {}).get('total', 0) > 0]
 for name, rec in YE['annual'].items():
     if name in ('合计',):
         continue
-    y26 = sum(YE['months'][str(m)].get(name, {}).get('2026', {}).get('total', 0) for m in done)
-    y25 = sum(YE['months'][str(m)].get(name, {}).get('2025', {}).get('total', 0) for m in done)
+    y26 = sum(YE['months'][str(m)].get(name, {}).get(str(CUR_Y), {}).get('total', 0) for m in done)
+    y25 = sum(YE['months'][str(m)].get(name, {}).get(str(PRE_Y), {}).get('total', 0) for m in done)
     if y26 or y25:
         yearly['st_ytd'][name] = {'y26': round(y26, 1), 'y25': round(y25, 1),
                                   'yoy': round((y26 - y25) / y25 * 100, 1) if y25 else None}
+if not done:
+    # 跨年首月：静态月表还没有新年度，改用 months 逐月站级累加，
+    # 保证 1 月 1 日打开页面时「各站年度」不是一片空白。
+    for name in (SA.get('stations') or {}):
+        _t = sum(_s['t'] for _lb, _mo in months.items()
+                 if _lb.startswith(str(CUR_Y))
+                 for _s in (_mo.get('stations') or []) if _s.get('name') == name)
+        if _t:
+            yearly['st_ytd'][name] = {'y26': round(_t, 1), 'y25': 0.0, 'yoy': None}
 
 # ---- 年度累计（年初 → 最新有数据自然月），分零售/全口径，含柴汽油与同期 ----
 def agg(key, y, mons):
@@ -274,24 +459,34 @@ def ret_agg(y, mons):
     f, x = agg('合计', y, mons), agg('小额', y, mons)
     return {k: round(max(0.0, f[k] - x[k]), 1) for k in f}
 
-CUR_Y, PRE_Y = 2026, 2025
+# CUR_Y / PRE_Y 已在文件顶部由会计月标签推出（跨年自动跟随），此处不再写死
 
-# ---- 年度累计：基线 =「月销售累计·零售」(1~10 月，含分品类)，叠加当前会计月实时天数 ----
+# ---- 年度累计：基线 = 已完成的会计月（1..上月），叠加当前会计月已过天数 ----
 YP = json.load(open(os.path.join(ARCH, 'yearly_progress.json'), encoding='utf-8'))
-LIVE_KEY, LIVE_NO = '2026-11', 11
+LIVE_KEY, LIVE_NO = CUR_LABEL, CUR_NO
 live = months[LIVE_KEY]
 live_days = [d for d in live['daily'] if (d.get('t') or 0) > 0]
 live_t = round(sum(d['t'] for d in live_days), 2)
 live_d = round(sum(d.get('diesel', 0) for d in live_days), 2)
 live_g = round(sum(d.get('gas', 0) for d in live_days), 2)
 live_xt = round(live.get('xt') or 0, 2)
+# 当前会计月的金额（万元）。pack_from_payload 已把元折成万元，直接取用，
+# 不再从 CUR 重算 —— 两处各算一套是数字对不上的老根子。
+cur_amt = round(live.get('amt2') or live.get('amt') or 0, 2)
+# 当前会计月已过天号 / 含税万元合计。日柱、前一日窄条、日历合并都用它，
+# 与 live 同一来源，避免「天数一套、金额另一套」。
+cur_days = [d['d'] for d in live_days]
+cur_wan = round(live.get('wan2') or live.get('wan') or 0, 2)
 
 _mx = YP['ytd_mix']
 _br, _bx = _mx['retail'], (_mx.get('xiao_mix') or {})
 
 # 口径统一切到「日报逐月」（D:\成品油销量），不再用月报链，理由见 memory：
 # 日报口径可拆到每一站、每一天，且 2024–2026 三年同源，年度表才不会有缺口。
-_base_mons = sorted([k for k in YRB.get(str(CUR_Y), {})], key=int)   # 已完成会计月 1..10
+# ★ 已完成会计月 = 当年已有数据的月，且**排除当前会计月**。
+#   当前月的天数单独走 live_t 叠加；归档月也会补进 YRB（见上方 load_archives），
+#   若不排除，当前月会被算两遍（一次当"已完成月"、一次当"实时天数"）。
+_base_mons = sorted([k for k in YRB.get(str(CUR_Y), {}) if int(k) != LIVE_NO], key=int)
 
 # 视角层与金额层共用的月份键 / 同期日号（提前定义，避免下面两段各算一套）
 BASE_YM26 = ['%d%02d' % (CUR_Y, int(x)) for x in _base_mons]
@@ -365,7 +560,7 @@ _amt_yoy = round((_amt_all / _amt_prev - 1) * 100, 1) if _amt_prev else None
 _xiao_wan = round(_acc(BASE_YM26, [XIAO], 'amt') / 1e4, 2)     # 含税万元
 _xiao_wan0 = round(_acc(BASE_YM26, [XIAO], 'wan'), 2)          # 不含税万元
 _retail_wan0 = round(_acc(BASE_YM26, ALL_REAL_ST, 'wan'), 2)   # 零售不含税万元
-_cur_wan = round(sum(CUR['sale'][d].get('wan', 0) for d in cur_days), 2)
+_cur_wan = cur_wan
 _retail_net_all = round(_retail_wan0 + _cur_wan, 2)
 _xiao_net = _xiao_wan0
 _xiao_tax = _xiao_wan
@@ -389,7 +584,9 @@ yearly['ytd'] = {
             'full_net': round(_retail_net_all + _xiao_net, 2),
             'xiao_src': '日报日块·小额配送行·当日销售额/销售收入列'},
     'flow_now': flow_now,
-    'gap_vs_flow': round(_br_t - YP['ytd_retail'][str(CUR_Y)], 2),
+    # ★ 用 .get 兜零：yearly_progress.json 是静态文件，跨年后没有新年度的键，
+    #   硬索引会 KeyError 把整页搞挂（已验证会踩）。缺就记 0，对比值照常出。
+    'gap_vs_flow': round(_br_t - (YP['ytd_retail'].get(str(CUR_Y)) or 0), 2),
     'src': '2024–2026 日报（D:\\成品油销量）',
 }
 
@@ -431,16 +628,22 @@ yearly['hist_xiao_months'] = {'2023': {
     for _m in range(1, 13)}}
 yearly['xiao_annual'] = {
     '2023': round(sum(yearly['hist_xiao_months']['2023'].values()), 2)}
-for _y in ('2024', '2025', '2026'):
+for _y in YRS4_S:
+    if _y == '2023':
+        continue                       # 2023 走台账，见上
     yearly['xiao_annual'][_y] = round(sum(_rbx.get(_y, {}).values()), 2)
-yearly['real_annual'] = {
-    '2023': hist_a.get('2023', 0),
-    '2024': rb_sum(2024),
-    '2025': rb_sum(2025),
-    '2026': round(disp_t, 2),
-}
-yearly['real_note'] = ('2023 为公司台账（自然月，无日报文件）；2024–2026 为各月日报逐站累计，'
-                       '会计月 26 日→次月 25 日。2026 含 11 月会计月已填 %d 天。' % len(live_days))
+
+# ★ 年度序列全部按 YRS4 窗口生成，当前年固定取「已完月 + 当前月实时」（disp_*）。
+#   跨年时 CUR_Y 变成 2027，2026 自动落到 rb_sum 分支 —— 而 YRB 里 2026 已被
+#   归档补满 1..12 月，于是 2026 会计年冻结为完整值，2027 从 0 开始，互不污染。
+yearly['real_annual'] = {str(_y): rb_sum(_y) for _y in YRS4}
+yearly['real_annual'][str(CUR_Y)] = round(disp_t, 2)
+if HAS_2023:
+    yearly['real_annual']['2023'] = hist_a.get('2023', 0)
+yearly['real_note'] = (
+    ('2023 为公司台账（自然月，无日报文件）；' if HAS_2023 else '')
+    + '%d–%d 为各月日报逐站累计，会计月 26 日→次月 25 日。%d 含 %d 月会计月已填 %d 天。'
+    % (YRS4[1] if HAS_2023 else YRS4[0], CUR_Y, CUR_Y, CUR_NO, len(live_days)))
 
 # ---- 年度柴汽拆分 -----------------------------------------------------------
 # 「历年销量对比」的堆叠柱要拆成 柴油 / 汽油 / 小额配送 三段。
@@ -456,18 +659,14 @@ _T23 = float(_L23.get('total') or 0)
 if _T23 and abs((_D23 + _G23) - _T23) > 0.5:
     print('[warn] 2023 台账柴汽之和 %.2f ≠ 零售 %.2f，2023 柱改用斜纹' % (_D23 + _G23, _T23))
     _D23 = _G23 = 0.0
-yearly['diesel_annual'] = {
-    '2023': round(_D23, 2),
-    '2024': rb_sum(2024, key='m_diesel'),
-    '2025': rb_sum(2025, key='m_diesel'),
-    '2026': round(disp_d, 2),
-}
-yearly['gas_annual'] = {
-    '2023': round(_G23, 2),
-    '2024': rb_sum(2024, key='m_gas'),
-    '2025': rb_sum(2025, key='m_gas'),
-    '2026': round(disp_g, 2),
-}
+yearly['diesel_annual'] = {str(_y): rb_sum(_y, key='m_diesel') for _y in YRS4}
+yearly['diesel_annual'][str(CUR_Y)] = round(disp_d, 2)
+if HAS_2023:
+    yearly['diesel_annual']['2023'] = round(_D23, 2)
+yearly['gas_annual'] = {str(_y): rb_sum(_y, key='m_gas') for _y in YRS4}
+yearly['gas_annual'][str(CUR_Y)] = round(disp_g, 2)
+if HAS_2023:
+    yearly['gas_annual']['2023'] = round(_G23, 2)
 print('年度柴汽：柴油 %s | 汽油 %s'
       % (yearly['diesel_annual'], yearly['gas_annual']))
 
@@ -475,10 +674,17 @@ print('年度柴汽：柴油 %s | 汽油 %s'
 _SUMKEYS = ('合计', '零售', '小额')
 PAIR_ANN, PAIR_ROAD = {}, {}
 for _pn, _rec in SA['pair'].items():
-    PAIR_ANN[_pn] = {'2023': 0.0,
-                     '2024': float(_rec.get('2024', 0) or 0),
-                     '2025': float(_rec.get('2025', 0) or 0),
-                     '2026': float(_rec.get('2026', 0) or 0)}
+    PAIR_ANN[_pn] = {str(_y): float(_rec.get(str(_y), 0) or 0) for _y in YRS4}
+    # ★ stations_annual.json 是静态文件，只到制作那年（当前是 2026）。
+    #   跨年后当年（2027）在它里面不存在 —— 这时用 months 逐月站级累加补，
+    #   数据源是归档 + 实时月份，所以跨年当天就有数，不会整张表变 0。
+    if str(CUR_Y) not in _rec:
+        _want = set(SA.get('pair_stations', {}).get(_pn) or [])
+        PAIR_ANN[_pn][str(CUR_Y)] = round(sum(
+            _s['t'] for _lb, _mo in months.items()
+            if _lb.startswith(str(CUR_Y))
+            for _s in (_mo.get('stations') or [])
+            if _s.get('name') in _want), 1)
 for _pn, _rec in YE['annual'].items():      # 2023 仅有台账
     if _pn in _SUMKEYS or _pn not in PAIR_ANN:
         continue
@@ -513,7 +719,7 @@ _PAIRS_ALL = dict(SA.get('pair_stations', {}))
 _PAIRS_ALL[XIAO] = [XIAO]
 PAIR_ROAD[XIAO] = '公司级'
 _XA = {}
-for _y in (2023, 2024, 2025, 2026):
+for _y in YRS4:
     if _y == 2023:
         # 2023 无日报，取公司台账「小额」科目（与 15 对的台账零售口径同源，可相加）
         _XA['2023'] = round(float(
@@ -521,7 +727,7 @@ for _y in (2023, 2024, 2025, 2026):
     else:
         _XA[str(_y)] = round(sum(v.get(XIAO, {}).get('t', 0) or 0
                                  for k, v in SER['months'].items() if k.startswith(str(_y))), 1)
-# 当年补上 11 月实时（小额当月为 0 也照加，保证与全口径一致）
+# 当年补上当前会计月实时小额（小额当月为 0 也照加，保证与全口径一致）
 _XA[str(CUR_Y)] = round(_XA.get(str(CUR_Y), 0) + live_xt, 1)
 PAIR_ANN[XIAO] = _XA
 yearly['pair_annual'] = PAIR_ANN
@@ -561,8 +767,8 @@ yearly['yoy_base'] = {
 }
 yearly['xiao'] = {
     'name': XIAO, 'road': '公司级', 'stations': [XIAO],
-    't26': round(_XA.get('2026', 0), 1),
-    'share': round(_XA.get('2026', 0) / full_t * 100, 1) if full_t else 0,
+    't26': round(_XA.get(str(CUR_Y), 0), 1),
+    'share': round(_XA.get(str(CUR_Y), 0) / full_t * 100, 1) if full_t else 0,
 }
 
 # ---- 会计月轨迹：完整 6 个月跨度（含进行中当月） ----
@@ -605,12 +811,19 @@ for _m in range(LIVE_NO - 5, LIVE_NO + 1):
                   'prev': _prev,
                   'yoy': round((_t / _prev - 1) * 100, 1) if _prev else None})
 # 分站级年度（按站切换用）：2023 只有公司台账、无分站明细，故不造数
-yearly['station_annual'] = {
-    _k: {'pair': _v.get('pair', ''), 'road': _v.get('road', ''),
-         '2024': float(_v.get('2024') or 0),
-         '2025': float(_v.get('2025') or 0),
-         '2026': float(_v.get('2026') or 0)}
-    for _k, _v in SA['stations'].items()}
+# ★ 年份键按 YRS4 窗口生成。stations_annual.json 是静态文件、只到制作那年，
+#   跨年后当年缺席 → 用 months（归档+实时）逐月累加补上，否则整张年度表变 0。
+yearly['station_annual'] = {}
+for _k, _v in SA['stations'].items():
+    _row = {'pair': _v.get('pair', ''), 'road': _v.get('road', '')}
+    for _y in YRS4:
+        _row[str(_y)] = float(_v.get(str(_y)) or 0)
+    if str(CUR_Y) not in _v:
+        _row[str(CUR_Y)] = round(sum(
+            _s['t'] for _lb, _mo in months.items()
+            if _lb.startswith(str(CUR_Y))
+            for _s in (_mo.get('stations') or []) if _s.get('name') == _k), 1)
+    yearly['station_annual'][_k] = _row
 
 # ============================================================================
 # 视角数据层：L1 全公司（company） / 单站（= 一对，pair）
@@ -909,13 +1122,18 @@ print('分对逐年序列：%d 对 | 柴汽自洽异常 %d 条%s'
       % (len(yearly['pair_series']), len(_chk),
          ('：' + '；'.join(_chk[:4])) if _chk else ''))
 
+_last_done = max([int(x) for x in _base_mons] or [0])
 yearly['views'] = {
     'company': VIEW_CO,
     'pairs': VIEW_PAIR,
-    'note': ('单站视角 = 一个服务区（东西 / 南北两站合计）。与全公司视角同源同算法：'
-             '1–%d 会计月取日报日块逐站累加，%d 月取实时已填 %d 天。'
-             '%d 月分品类产值按当月柴/汽吨量占比拆分；去年同期金额按同期吨量占整月比例折算。'
-             % (max(int(x) for x in _base_mons), LIVE_NO, len(live_days), LIVE_NO)),
+    # 跨年首月时 _base_mons 为空（新年度还没走完任何会计月），max() 会抛
+    # 「iterable argument is empty」。用 or [0] 兜底，文案退化成「1–0 月」不显示也可读。
+    'note': (('单站视角 = 一个服务区（东西 / 南北两站合计）。与全公司视角同源同算法：'
+              '%s%d 月取实时已填 %d 天。' % (('1–%d 会计月取日报日块逐站累加，' % _last_done)
+                                            if _last_done else '本会计年尚未走完任何整月，',
+                                            LIVE_NO, len(live_days)))
+             + ('%d 月分品类产值按当月柴/汽吨量占比拆分；'
+                '去年同期金额按同期吨量占整月比例折算。' % LIVE_NO)),
 }
 
 # ---- 路段结构：全年累计 + 逐会计月（供图表在「全年 / 各月」之间切换）----
@@ -953,7 +1171,12 @@ yearly['roads'] = {
     'note': '8 条高速路段 = 15 对实体站按所属路段归集，不含小额配送（小额无路段归属）',
 }
 
-payload = {'meta': {'generated': (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).strftime('%Y-%m-%d %H:%M'),                    'month_order': ['2026-11', '2026-10', '2026-09'],
+# 月份切换条：当前会计月打头，其后按标签降序取最近两个（归档月也算）。
+# ★ 归档月必须进这个列表 —— 否则清表后上月从切换条里消失，用户会以为数据没了。
+_labs_desc = sorted(months.keys(), reverse=True)
+MONTH_ORDER = [CUR_LABEL] + [x for x in _labs_desc if x != CUR_LABEL][:2]
+
+payload = {'meta': {'generated': (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).strftime('%Y-%m-%d %H:%M'),                    'month_order': MONTH_ORDER,
                     'trend': TREND},
            'months': months, 'yearly': yearly,
            'daily_win': WINDOWS, 'last_date': LAST_DT.isoformat() if LAST_DT else ''}
@@ -1095,13 +1318,24 @@ else:
              health.get('current_days'), health.get('current_expected'),
              health.get('current_status')))
 
+# ---- 前端驱动字段：年份窗口 / 当前会计月，全部由 build 预算好，前端只读不算 ----
+# 这样模板里不再出现任何写死的 2023/2024/2025/2026，跨年（12-26）无需改前端。
+payload['meta']['years'] = YRS4_S
+payload['meta']['cur_year'] = CUR_Y
+payload['meta']['prev_year'] = PRE_Y
+payload['meta']['has_2023'] = HAS_2023
+payload['meta']['cur_month'] = CUR_LABEL
+payload['meta']['cur_month_no'] = CUR_NO
+payload['meta']['cur_span'] = acct_range_txt(CUR_LABEL)
+payload['meta']['cur_expected_days'] = CUR_EXPECT
+
 tpl = open(os.path.join(BASE, 'cockpit2_template.html'), encoding='utf-8').read()
 html = tpl.replace('__PAYLOAD__', json.dumps(payload, ensure_ascii=False))
 out = os.path.join(ROOT, 'cockpit', 'index.html')
 os.makedirs(os.path.dirname(out), exist_ok=True)   # 云端首次构建时该目录不存在
 open(out, 'w', encoding='utf-8').write(html)
 print('written', out, len(html))
-for k in ['2026-11', '2026-10', '2026-09']:
+for k in MONTH_ORDER:
     m = months[k]
     print(' %s %-8s %d天 %8.1f吨 含税%7.0f万 站%d 渠道%d 客户%d'
           % (k, m['range'], m['days'], m['t'], m['amt'], len(m['stations']),

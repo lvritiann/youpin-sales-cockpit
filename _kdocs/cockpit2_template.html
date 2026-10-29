@@ -986,11 +986,7 @@
             <col style="width:11%"><col style="width:11%"><col style="width:11%"><col style="width:12%">
             <col style="width:10%"><col style="width:10%">
           </colgroup>
-          <thead><tr>
-            <th>排位</th><th>路段</th><th>站点对 / 分站</th>
-            <th>2023</th><th>2024</th><th>2025</th><th>2026 <sup style="color:#d9b878">*</sup></th>
-            <th>2026 比 2025 <sup style="color:#8fa6bd">†</sup></th><th>四年累计</th>
-          </tr></thead>
+          <thead><tr id="yth"><!-- 年份列由 renderYearHead() 按 D.meta.years 填，绝不写死年份 --></tr></thead>
           <tbody id="pann-tb"></tbody>
           <tfoot id="pann-tf"></tfoot>
         </table>
@@ -1015,7 +1011,7 @@
         </div>
         <div>
           <div class="ytitle"><b>各月销量对比（吨）与同比</b>
-            <span>同比 = 2026 ÷ 2025 同期 − 1</span></div>
+            <span id="ytbl-yoynote"></span></div>
           <div class="ytblbox">
             <table class="mtbl" id="ytbl"></table>
           </div>
@@ -1098,8 +1094,12 @@ let RDSEL = '';
 let PDRI = 0, PDFMT = '10';
 const XIAO_NAME = (D.yearly && D.yearly.xiao && D.yearly.xiao.name) || '小额配送';
 const tv = m => SCP === 'full' ? m.ft : m.t;
-const CUR_Y = +(D.meta.month_order[0] || '2026-11').slice(0, 4);
-const LIVE_M = +((D.meta.month_order[0] || '2026-11').split('-')[1]);
+/* ★ 当前会计年 / 月份一律以 build 预算的 meta 为准。
+   老写法从 month_order[0] 反推，清表后 month_order 的首项仍是当前月没错，
+   但只要月份列表顺序一变（归档月插进来）就会错位，所以改成直读 meta。 */
+const CUR_Y = +(D.meta.cur_year || (D.meta.month_order[0] || '2026-11').slice(0, 4));
+const PRE_Y = +(D.meta.prev_year || (CUR_Y - 1));
+const LIVE_M = +(D.meta.cur_month_no || +((D.meta.month_order[0] || '2026-11').split('-')[1]));
 
 $('#c-gen').textContent = D.meta.generated;
 
@@ -1128,7 +1128,7 @@ function pairList() {
   const ps = D.yearly.pair_stations_all || D.yearly.pair_stations || {};
   return Object.keys(pa).map(k => ({
     name: k, road: rd[k] || '',
-    t26: (pa[k] || {})['2026'] || 0,
+    t26: (pa[k] || {})[String(CUR_Y)] || 0,
     st: ps[k] || [],
     virtual: k === XIAO_NAME
   })).sort((a, b) => b.t26 - a.t26);
@@ -1660,7 +1660,7 @@ function vCard(P) {
       </div>
     </div>
     <div>
-      <div class="vt">渠道结构 <b>${hasChan ? '2026 累计 · 竖线为公司均值' : '无渠道拆分'}</b></div>
+      <div class="vt">渠道结构 <b>${hasChan ? CUR_Y + ' 累计 · 竖线为公司均值' : '无渠道拆分'}</b></div>
       ${hasChan ? rows.map(c => {
         const b = base[c.name];
         const dv = b == null ? null : c.share - b;
@@ -2109,7 +2109,7 @@ function render() {
     const otherT = (P.chan || []).slice(6).reduce((s, x) => s + x.t, 0);
     chSegs = otherT > 0 ? top6.concat([{ name: '其他', t: +otherT.toFixed(1),
       share: +(otherT / chTot * 100).toFixed(1) }]) : top6;
-    chNote = chTot ? '2026 累计' : '无渠道拆分';
+    chNote = chTot ? (CUR_Y + ' 累计') : '无渠道拆分';
   } else {
     chTot = m.t;
     const top6 = m.channels.slice(0, 6);
@@ -2335,10 +2335,15 @@ function yearly() {
     s.classList.toggle('off', !show);
   });
 
-  const A23 = (DATA.find(z => z.y === 2023) || {o: {t: 0}}).o.t;
-  const A24 = (DATA.find(z => z.y === 2024) || {o: {t: 0}}).o.t;
-  const A25 = (DATA.find(z => z.y === 2025) || {o: {t: 0}}).o.t;
-  const A26 = (DATA.find(z => z.y === curY) || {o: {t: 0}}).o.t;
+  /* 年度窗口前三年 + 当年。索引取自 D.meta.years，跨年后自动跟着滚，
+     不再写死 2023/2024/2025 —— 否则 2027 年打开页面会拿 2027 的数据
+     去比 2024，同比完全失真。 */
+  const _YS = (D.meta && D.meta.years) || [];
+  const _yv = y => (DATA.find(z => z.y === +y) || {o: {t: 0}}).o.t;
+  const A23 = _yv(_YS[0]);   // 窗口第 1 年（当前是 2023，台账年）
+  const A24 = _yv(_YS[1]);   // 第 2 年
+  const A25 = _yv(_YS[2]);   // 第 3 年
+  const A26 = _yv(curY);
   const g25 = A24 ? (A25 / A24 - 1) * 100 : null;
   /* 当年同比：公司级直接用顶部 KPI 那一套（含实时天数）；单站视角改用
      「2026 会计月 1–lastMo 月 ÷ 2025 同月 − 1」，分子分母同窗口，不把实时 3 天算进分子。 */
@@ -2360,12 +2365,12 @@ function yearly() {
 
   const head = PAIRV
     ? `<b>${isXiao ? '小额配送（公司级实体）' : PSEL + (PLOAD ? '（' + PLOAD + '）' : '')}</b> 历年：
-       2023 年 ${n(A23)} → 2024 年 ${n(A24)} → 2025 年 ${n(A25)} 吨，
-       2025 比 2024 ${em(g25, fmt(g25))}（仅此一处做年度同比）。
+       ${_YS[0]} 年 ${n(A23)} → ${_YS[1]} 年 ${n(A24)} → ${_YS[2]} 年 ${n(A25)} 吨，
+       ${_YS[2]} 比 ${_YS[1]} ${em(g25, fmt(g25))}（仅此一处做年度同比）。
        ${curY} 年至 ${Y.ytd.as_of || ''} 累计 ${n(A26)} 吨，按同期
        （会计月 1–${lastMo} 月）比 ${em(sv, fmt(sv))}；同窗口对比，不含当月实时天数。`
-    : `<b>年度</b>：2023 年 ${n(A23)} → 2024 年 ${n(A24)} → 2025 年 ${n(A25)} 吨，
-       2025 比 2024 ${em(g25, fmt(g25))}（仅此一处做年度同比，2023、2024 不参与同比）。
+    : `<b>年度</b>：${_YS[0]} 年 ${n(A23)} → ${_YS[1]} 年 ${n(A24)} → ${_YS[2]} 年 ${n(A25)} 吨，
+       ${_YS[2]} 比 ${_YS[1]} ${em(g25, fmt(g25))}（仅此一处做年度同比，更早年份不参与同比）。
        ${curY} 年至 ${Y.ytd.as_of || ''} 累计 ${n(A26)} 吨，按同期（1–${lastMo} 月 + ${L.days || 0} 天）
        比 ${em(sv, fmt(sv))}，不可拿部分年度去比前几年全年数。`;
 
@@ -2445,16 +2450,38 @@ function yearly() {
   $('#ytbl').innerHTML = h;
 }
 
+/* ---------- 年度表头：年份列按 D.meta.years 生成，绝不写死 ----------
+   ★ 为什么要动态：跨年（每年 12-26 进入新会计年）后列名必须换成新年度。
+     写死 2023–2026 的话，2027 年打开页面会看到「2026」列里装着 2027 的数，
+     属于最典型的「外界能感知到后台变了」。 */
+function renderYearHead() {
+  const tr = document.getElementById('yth');
+  if (!tr) return;
+  const YS = (D.meta && D.meta.years) || [];
+  if (!YS.length) return;
+  const CY = String(CUR_Y), PY = String(PRE_Y);
+  tr.innerHTML = '<th>排位</th><th>路段</th><th>站点对 / 分站</th>'
+    + YS.map(y => `<th>${y}${y === CY ? ' <sup style="color:#d9b878">*</sup>' : ''}</th>`).join('')
+    + `<th>${CY} 比 ${PY} <sup style="color:#8fa6bd">†</sup></th>`
+    + `<th>${YS.length}年累计</th>`;
+  const nt = document.getElementById('ytbl-yoynote');
+  if (nt) nt.textContent = `同比 = ${CY} ÷ ${PY} 同期 − 1`;
+}
+
 /* ---------- 各站年度销量（按对 / 按站） ---------- */
 function pairAnnual() {
   const Y = D.yearly, pa = Y.pair_annual || {}, rd = Y.pair_road || {};
   const std = Y.station_annual || {}, ps = Y.pair_stations_all || Y.pair_stations || {};
   const PSAME = Y.pair_prev_same || {}, SSAME = Y.station_prev_same || {};
   const YB = Y.yoy_base || {};
-  const YRS = ['2023', '2024', '2025', '2026'];
+  /* ★ 年份窗口由 build 预算（D.meta.years），前端不写死。
+     跨年（12-26）后自动从 2023–2026 滚成 2024–2027，本函数无需改动。 */
+  const YRS = (D.meta && D.meta.years) || ['2023', '2024', '2025', '2026'];
+  const CY = String(CUR_Y);
+  const PY = String(PRE_Y);
   const FULL = SCP === 'full';
-  /* ★ 同比 = 2026 ÷ 2025 同期 − 1（同日历年）。2026 只走完 1–10 月，
-     拿它比 2025 全年是假对比、比 2024 更无意义 —— 分子分母必须同窗口。
+  /* ★ 同比 = 当年 ÷ 上年同期 − 1（同日历年）。当年通常只走完部分月份，
+     拿它比上年全年是假对比 —— 分子分母必须同窗口。
      基数由 build 侧 yearly.pair_prev_same 预算好（同源 SER 日块）。 */
   const yoyOf = (cur, base) => (cur && base) ? (cur / base - 1) * 100 : null;
   // 口径开关同样作用于本表：仅零售时不列小额行，合计即 15 对零售
@@ -2464,8 +2491,8 @@ function pairAnnual() {
     return {name: k, road: rd[k] || '', v, kind: 'pair', st: ps[k] || [],
             virtual: k === XIAO_NAME,
             sum: YRS.reduce((a, y) => a + (v[y] || 0), 0),
-            bs, g: yoyOf(v['2026'], bs)};
-  }).sort((a, b) => (b.v['2026'] || 0) - (a.v['2026'] || 0));
+            bs, g: yoyOf(v[CY], bs)};
+  }).sort((a, b) => (b.v[CY] || 0) - (a.v[CY] || 0));
 
   // 全部视角只看 15 对；选定对后才插入该对的分站行（否则一次 45 行，太占屏）
   const shown = [];
@@ -2476,12 +2503,14 @@ function pairAnnual() {
     r.st.forEach(sn => {
       const sv = std[sn];
       if (!sv) return;
-      const v = {'2023': null, '2024': sv['2024'] || 0,
-                 '2025': sv['2025'] || 0, '2026': sv['2026'] || 0};
+      /* 分站行：2023 只有公司台账、无分站明细，恒为 null（显示 —，不造数）。
+         其余年份按窗口取；跨年后 2023 滚出窗口，就不会再出现 null 列。 */
+      const v = {};
+      YRS.forEach(y => { v[y] = (y === '2023') ? null : (sv[y] || 0); });
       const bs = SSAME[sn] || 0;
       shown.push({name: sn, road: r.road, v, kind: 'st', rank: null,
-                  sum: v['2024'] + v['2025'] + v['2026'],
-                  bs, g: yoyOf(v['2026'], bs)});
+                  sum: YRS.reduce((a, y) => a + (v[y] || 0), 0),
+                  bs, g: yoyOf(v[CY], bs)});
     });
   });
 
@@ -2493,14 +2522,14 @@ function pairAnnual() {
   $('#pann-tb').innerHTML = shown.map(r => {
     const c = cell(r);
     const gTip = r.g === null
-      ? '缺 2025 同期基数，不臆造百分比'
-      : `${YB.cur_year || 2026} ${n(r.v['2026'])} 吨 ÷ ${YB.prev_year || 2025} 同期 ${n(r.bs)} 吨 − 1`
+      ? `缺 ${PY} 同期基数，不臆造百分比`
+      : `${YB.cur_year || CUR_Y} ${n(r.v[CY])} 吨 ÷ ${YB.prev_year || PRE_Y} 同期 ${n(r.bs)} 吨 − 1`
         + ` = ${(r.g >= 0 ? '+' : '') + r.g.toFixed(1)}%`;
     return `<tr class="${r.kind === 'st' ? 'sg' : 'ag'}${r.virtual ? ' vx' : ''}">
       <td>${r.rank ? `<span class="rk ${r.rank <= 3 ? 't' + r.rank : ''}">${r.rank}</span>` : ''}</td>
       <td>${r.kind === 'pair' ? `<span class="tag">${r.road}</span>` : ''}</td>
       <td>${r.name}${r.virtual ? '<span class="tag" style="margin-left:6px">公司级</span>' : ''}</td>
-      ${YRS.map(y => `<td style="${y === '2026' ? hi : ''}">${c(y)}</td>`).join('')}
+      ${YRS.map(y => `<td style="${y === CY ? hi : ''}">${c(y)}</td>`).join('')}
       <td class="${r.g === null ? '' : (r.g >= 0 ? 'up' : 'dn')}" title="${gTip}">${r.g === null ? '—'
         : (r.g >= 0 ? '+' : '') + r.g.toFixed(1) + '%'}</td>
       <td>${n(r.sum)}</td></tr>`;
@@ -2521,33 +2550,35 @@ function pairAnnual() {
     + `<td>${n(T.reduce((a, b) => a + b, 0))}</td></tr>`;
 
   $('#pann-hint').textContent = `${FULL ? '全口径' : '仅零售'} · 吨 `
-    + (PSEL ? `· ${PSEL}` : '· 按 2026 年降序');
+    + (PSEL ? `· ${PSEL}` : `· 按 ${CUR_Y} 年降序`);
 
   const baseTop = FULL ? Y.ytd.full.t : Y.ytd.retail.t;
   const gapTop = +(baseTop - T[3]).toFixed(1);
   const LG = Y.ledger_retail || {};
-  const d24 = PSEL ? null : (LG['2024'] ? +(T[1] - LG['2024']).toFixed(1) : null);
-  const d25 = PSEL ? null : (LG['2025'] ? +(T[2] - LG['2025']).toFixed(1) : null);
+  // 台账年份跟着窗口滚：当年 2026 时是 2024/2025 两列，跨年后自动变 2026/2027。
+  const LG2 = String(CUR_Y - 2), LG1 = String(CUR_Y - 1);
+  const d24 = PSEL ? null : (LG[LG2] ? +(T[1] - LG[LG2]).toFixed(1) : null);
+  const d25 = PSEL ? null : (LG[LG1] ? +(T[2] - LG[LG1]).toFixed(1) : null);
   const sgn = v => (v >= 0 ? '+' : '') + n(v);
   const cur = `<em style="font-style:normal;color:#e8cf95">${PSEL}</em>`;
   $('#pann-note').innerHTML = `<b>口径</b>：${Y.pair_annual_note || ''}`
     + (PSEL
       ? `当前按 ${cur} 筛选，合计 ${n(T[3])} 吨；2023 年公司台账只到「对」一级、
          无分站明细，故分站行 2023 列留空不臆造。`
-      : `2026 列合计 ${n(T[3])} 吨，与顶部「全年累计 ${n(baseTop)} 吨」
+      : `${CUR_Y} 列合计 ${n(T[3])} 吨，与顶部「全年累计 ${n(baseTop)} 吨」
          ${Math.abs(gapTop) < 1 ? '完全一致' : `差 ${sgn(gapTop)} 吨`}。`
-        + (d24 === null ? '' : `与公司台账相比，2024 年${d24 >= 0 ? '多' : '少'}
+        + (d24 === null ? '' : `与公司台账相比，${LG2} 年${d24 >= 0 ? '多' : '少'}
            <em class="dn" style="font-style:normal;font-weight:640">${n(Math.abs(d24))}</em> 吨、
-           2025 年${d25 >= 0 ? '多' : '少'}
+           ${LG1} 年${d25 >= 0 ? '多' : '少'}
            <em class="dn" style="font-style:normal;font-weight:640">${n(Math.abs(d25))}</em> 吨`)
         + `（逐对差都在几十吨量级，属台账录入微差，非统计错误）。`)
     + `<br><b>同比（†）</b>：<em style="font-style:normal;color:#e8cf95">`
-    + `${YB.cur_year || 2026} ÷ ${YB.prev_year || 2025} 同期 − 1</em>，`
-    + `基数取 ${YB.label || '上年同期'}（与 2026 列同一会计月窗口），`
-    + `不是拿 ${YB.cur_year || 2026} 的部分年度去比 ${YB.prev_year || 2025} 全年。`
+    + `${YB.cur_year || CUR_Y} ÷ ${YB.prev_year || PRE_Y} 同期 − 1</em>，`
+    + `基数取 ${YB.label || '上年同期'}（与 ${CUR_Y} 列同一会计月窗口），`
+    + `不是拿 ${YB.cur_year || CUR_Y} 的部分年度去比 ${YB.prev_year || PRE_Y} 全年。`
     + `悬停任一同比格可见「分子 ÷ 分母」原式。`
-    + `顶部 KPI 的同比含 11 月会计月已填 ${(Y.ytd && Y.ytd.live_days) || 0} 天，`
-    + `本表 2026 列只到上月会计月末，两者窗口差这几天，故数值略有出入属正常。`
+    + `顶部 KPI 的同比含 ${LIVE_M} 月会计月已填 ${(Y.ytd && Y.ytd.live_days) || 0} 天，`
+    + `本表 ${CUR_Y} 列只到上月会计月末，两者窗口差这几天，故数值略有出入属正常。`
     + (FULL ? ` <em class="dn" style="font-style:normal">小额配送同比偏高（+1000% 量级）` +
         `不是真实增长</em>：2024-06～2025-12 源表无「小额配送」行，上年基数被严重低估。`
       : '');
@@ -2573,6 +2604,7 @@ function renderHealth() {
 }
 
 renderHealth();
+renderYearHead();   // 年份表头必须早于 render —— render 里会读 #yth 的列数做对齐
 render();
 </script>
 </body>
