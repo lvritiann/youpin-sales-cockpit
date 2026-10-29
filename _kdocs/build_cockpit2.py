@@ -108,6 +108,8 @@ def pack_month(mkey, raw):
     ch = sorted([{'name': k, **v, 'share': round(v['t'] / t * 100, 1) if t else 0}
                  for k, v in raw['channels'].items()], key=lambda x: -x['t'])
     cl = raw.get('clients', [])
+    # 按升数从大到小排：环形图只取前 5 名进图例，不排序会让「其他客户」乱序拼接
+    cl = sorted(cl, key=lambda x: -(x.get('l') or 0))
     bt = sum(c['t'] for c in cl)
     for c in cl:
         c['share'] = round(c['l'] / sum(x['l'] for x in cl) * 100, 1) if cl else 0
@@ -439,6 +441,25 @@ yearly['real_annual'] = {
 }
 yearly['real_note'] = ('2023 为公司台账（自然月，无日报文件）；2024–2026 为各月日报逐站累计，'
                        '会计月 26 日→次月 25 日。2026 含 11 月会计月已填 %d 天。' % len(live_days))
+
+# ---- 年度柴汽拆分 -----------------------------------------------------------
+# 「历年销量对比」的堆叠柱要拆成 柴油 / 汽油 / 小额配送 三段。
+# 与 real_annual 严格同源同窗口：2024–2025 走日块逐月累加（rb_sum），
+# 2026 走「已完月 + 11 月实时」（disp_d / disp_g 就是它）。
+# ★ 必须满足 diesel + gas == real_annual，否则堆叠柱总高会与柱顶数值不符。
+# 2023 无日报文件、台账不拆柴汽 —— 前端画斜纹「未拆分」段，不臆造比例。
+yearly['diesel_annual'] = {
+    '2024': rb_sum(2024, key='m_diesel'),
+    '2025': rb_sum(2025, key='m_diesel'),
+    '2026': round(disp_d, 2),
+}
+yearly['gas_annual'] = {
+    '2024': rb_sum(2024, key='m_gas'),
+    '2025': rb_sum(2025, key='m_gas'),
+    '2026': round(disp_g, 2),
+}
+print('年度柴汽：柴油 %s | 汽油 %s'
+      % (yearly['diesel_annual'], yearly['gas_annual']))
 
 # ---- 各对年度销量：2024–2026 走日报逐站聚合，2023 只能取台账 ----
 _SUMKEYS = ('合计', '零售', '小额')
@@ -966,6 +987,29 @@ prev_day = {
                  else (sum(int(x.get('fv') or 0) for x in _pd_items) if _FLOW else None)),
 }
 payload['prev_day'] = prev_day
+
+# ---- 数据健康状态 -----------------------------------------------------------
+# 来源：Actions 侧的 _kdocs/archive_snapshot.py 每次推送后生成的 _archive/HEALTH.json。
+# 用途：页面顶部一条红条。这是「无人值守」闭环里唯一的主动告警渠道 ——
+#       归档链路挂在仓库里，光有文件没人看等于没告警；用户每天都会看驾驶舱，
+#       把告警摆到那一屏才真正起作用。
+# 本地构建时这个文件通常不存在（HEALTH 只在仓库副本里生成），health 就是 {}，
+# 页面不显示任何东西 —— 不会因为本地缺文件而误报。
+health = {}
+_hp = os.path.join(ARCH, 'HEALTH.json')
+if os.path.exists(_hp):
+    try:
+        health = json.load(open(_hp, encoding='utf-8'))
+    except Exception:
+        health = {}
+payload['health'] = health
+if health.get('alert'):
+    print('⚠️ 数据健康告警：%s' % health['alert'])
+else:
+    print('数据健康：ok=%s（%s，%s/%s 天，%s）'
+          % (health.get('ok'), health.get('current_month'),
+             health.get('current_days'), health.get('current_expected'),
+             health.get('current_status')))
 
 tpl = open(os.path.join(BASE, 'cockpit2_template.html'), encoding='utf-8').read()
 html = tpl.replace('__PAYLOAD__', json.dumps(payload, ensure_ascii=False))
