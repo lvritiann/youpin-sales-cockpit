@@ -4,15 +4,15 @@
   "start": "2026-10-26",
   "end": "2026-11-25",
   "expected_days": 31,
-  "days_count": 3,
+  "days_count": 4,
   "status": "running",
-  "retail_t": 1541.36,
-  "diesel_t": 1186.41,
-  "gas_t": 354.95,
+  "retail_t": 2231.32,
+  "diesel_t": 1753.14,
+  "gas_t": 478.18,
   "xiao_t": 20,
-  "full_t": 1561.36,
-  "amt": 16106632.41,
-  "wan": 1425.85,
-  "stamp": "2026-10-29T08:18:17"
+  "full_t": 2251.32,
+  "amt": 23254228.88,
+  "wan": 2058.763,
+  "stamp": "2026-10-30T01:01:25"
  }
 }
