@@ -487,6 +487,25 @@ def ret_agg(y, mons):
 YP = json.load(open(os.path.join(ARCH, 'yearly_progress.json'), encoding='utf-8'))
 LIVE_KEY, LIVE_NO = CUR_LABEL, CUR_NO
 live = months[LIVE_KEY]
+
+# ★ 当前会计月「按日原始记录」：实时优先，缺的从当月归档补。
+#   为什么必须有这层：归档是 Actions 每跑一次就覆盖写的，跨日时它会**领先**
+#   data.json 一天（实测 2026-11-02：归档 8 天含日号 2，data.json 还是 7 天）。
+#   防回退逻辑见「归档天数 > 实时天数」会保留归档，于是 months 里有日号 2，
+#   而 CUR['sale']['2'] 不存在 —— 直接硬索引会 KeyError 把整页搞挂。
+_DAYREC = dict(CUR.get('sale') or {})
+for _lab0, _r0 in ARC.items():
+    if _lab0 != CUR_LABEL:
+        continue
+    for _d0, _v0 in ((_r0.get('payload') or {}).get('sale') or {}).items():
+        _DAYREC.setdefault(_d0, _v0)
+
+
+def dayrec(dayno):
+    """取某日号的原始记录（含 stations / xiao），缺失给空壳不抛错。"""
+    return _DAYREC.get(str(dayno)) or {}
+
+
 live_days = [d for d in live['daily'] if (d.get('t') or 0) > 0]
 live_t = round(sum(d['t'] for d in live_days), 2)
 live_d = round(sum(d.get('diesel', 0) for d in live_days), 2)
@@ -534,9 +553,9 @@ for _ym in BASE_YM26:
     _br_xd += float(_r.get('d') or 0)
     _br_xg += float(_r.get('g') or 0)
 _br_xd, _br_xg = round(_br_xd, 2), round(_br_xg, 2)
-live_xd = round(sum(float((CUR['sale'][str(int(d['d']))].get('xiao') or {}).get('diesel') or 0)
+live_xd = round(sum(float((dayrec(d['d']).get('xiao') or {}).get('diesel') or 0)
                     for d in live_days), 2)
-live_xg = round(sum(float((CUR['sale'][str(int(d['d']))].get('xiao') or {}).get('gas') or 0)
+live_xg = round(sum(float((dayrec(d['d']).get('xiao') or {}).get('gas') or 0)
                     for d in live_days), 2)
 
 # ---- 总量定死、分项取余额（2026-11-02 整改）--------------------------------
@@ -628,9 +647,9 @@ _cur_wan = cur_wan
 # ★ 实时那几天的小额金额必须补进来 —— 原来只累加了已完月（1~10 月），
 #   11 月已填 7 天的小额 18.01 万元整个漏掉，导致「公司视角含税」比
 #   「ytd 全口径含税」多出 18.01 万，两边永远对不上（2026-11-02 实测）。
-_live_xamt = round(sum(float((CUR['sale'][str(int(d['d']))].get('xiao') or {}).get('amt') or 0)
+_live_xamt = round(sum(float((dayrec(d['d']).get('xiao') or {}).get('amt') or 0)
                        for d in live_days) / 1e4, 2)
-_live_xwan = round(sum(float((CUR['sale'][str(int(d['d']))].get('xiao') or {}).get('wan') or 0)
+_live_xwan = round(sum(float((dayrec(d['d']).get('xiao') or {}).get('wan') or 0)
                        for d in live_days), 2)
 
 _retail_net_all = round(_retail_wan0 + _cur_wan, 2)
@@ -931,12 +950,12 @@ for _ym, _dst in SER['daily'].items():
                 pass
 for _d in cur_days:                               # 11 月实时并入同一张日历
     _dt = acct_date(LIVE_KEY, int(_d))
-    for _st, _v in CUR['sale'][_d]['stations'].items():
+    for _st, _v in (dayrec(_d).get('stations') or {}).items():
         if (_v.get('t') or 0) <= 0:
             continue
         ST_BYDATE.setdefault(_st, {})[_dt] = [_v['t'], _v.get('diesel', 0), _v.get('gas', 0)]
     # 小额配送同样并入，否则「小额」这一实体的近 30 天曲线会缺当月
-    _xr = CUR['sale'][_d].get('xiao') or {}
+    _xr = dayrec(_d).get('xiao') or {}
     if (_xr.get('t') or 0) > 0:
         ST_BYDATE.setdefault(XIAO, {})[_dt] = [_xr['t'], 0.0, 0.0]
 
@@ -972,8 +991,8 @@ def _live(sts, key):
     """
     tot = 0.0
     for _d in cur_days:
-        _rec = CUR['sale'][_d]
-        _ss = _rec['stations']
+        _rec = dayrec(_d)
+        _ss = _rec.get('stations') or {}
         for _st in sts:
             if _st == XIAO:
                 _x = _rec.get('xiao') or {}
@@ -1333,7 +1352,7 @@ def _price(amount, litres):
 #   missing 未提交   当日无销量、但前一天还有
 #   low     异常偏低 当日有量，但不足近 7 个有量日均值的 30%
 #   normal  正常
-_days_desc = sorted([d for d in (CUR.get('sale') or {}) if acct_date(CUR_LABEL, int(d))],
+_days_desc = sorted([d for d in _DAYREC if acct_date(CUR_LABEL, int(d))],
                     key=lambda x: acct_date(CUR_LABEL, int(x)), reverse=True)
 PAIR_DIAG = {}
 for _pn, _sts in PAIR_ST.items():
@@ -1341,7 +1360,7 @@ for _pn, _sts in PAIR_ST.items():
         continue
     _streak, _vals, _started = 0, [], False
     for _d in _days_desc:
-        _cs = (CUR['sale'][_d].get('stations') or {})
+        _cs = (dayrec(_d).get('stations') or {})
         _vt = sum(float((_cs.get(s) or {}).get('t') or 0) for s in _sts)
         if _vt > 0:
             _started = True
@@ -1364,14 +1383,26 @@ def _pair_status(t, diag):
     return 'normal'
 
 
-# ★ 与 as_of 同源：走 live_last_day() 按真实日期取，不能 max(int)。
+# ★ 与 as_of 同源：走真实日期取，不能 max(int)。
 #   之前这里取到日号 31（= 10-31 的 419.5 吨），而 prev_day.label 用的
 #   LAST_DT 是真实日期（11-01），于是卡片出现「标签 11-01、数字是 10-31」的错位。
-_pd_day = live_last_day() if cur_days else None
+#
+#   ★★ 「前一日」必须**严格早于今天**：今天的数据是陆续进来的（11-02 上午只到了
+#   3.4 吨 / 1 个站），拿它当「前一日」会让 15 对里 13 对标成「未提交」，
+#   看起来像大面积漏报，其实是当天还没报完。没有更早的日期时才退回最新一天。
+_pd_day, _pd_dt = None, None
+if cur_days:
+    _today = datetime.date.today()
+    _cands = [(acct_date(CUR_LABEL, int(x)), x) for x in cur_days]
+    _cands = [(dt, x) for dt, x in _cands if dt]
+    _only_prev = [(dt, x) for dt, x in _cands if dt < _today]
+    _pick = max(_only_prev or _cands) if _cands else None
+    if _pick:
+        _pd_dt, _pd_day = _pick
 _pd_items, _pd_x, _xiao_item = [], None, None
 _pd_sum = {'t': 0.0, 'gas': 0.0, 'diesel': 0.0, 'gL': 0.0, 'dL': 0.0, 'gA': 0.0, 'dA': 0.0}
 if _pd_day:
-    _cell = CUR['sale'][_pd_day]['stations']
+    _cell = dayrec(_pd_day).get('stations') or {}
     for _pn, _sts in PAIR_ST.items():
         if _pn == XIAO:
             continue
@@ -1411,7 +1442,7 @@ if _pd_day:
     _ORD = {'normal': 0, 'low': 1, 'missing': 2, 'closed': 3}
     _pd_items.sort(key=lambda x: (_ORD.get(x['status'], 0), -x['t']))
     # 小额配送：同样可拆柴汽（源表 -10/0/92/95 四列齐全），独立成第 16 项
-    _xr = CUR['sale'][_pd_day].get('xiao') or {}
+    _xr = dayrec(_pd_day).get('xiao') or {}
     _xt = round(float(_xr.get('t') or 0), 1)
     _xg = round(float(_xr.get('gas') or 0), 2)
     _xd = round(float(_xr.get('diesel') or 0), 2)
@@ -1422,8 +1453,10 @@ if _pd_day:
 
 prev_day = {
     'day': _pd_day,
-    'date': LAST_DT.isoformat() if LAST_DT else '',
-    'label': LAST_DT.strftime('%m-%d') if LAST_DT else '',
+    # ★ 日期与取数日同源（都用 _pd_dt），不再一个走 LAST_DT、一个走 _pd_day ——
+    #   两者错开的那个版本会写出「标签 11-01、数字是 10-31」的卡片。
+    'date': _pd_dt.isoformat() if _pd_dt else '',
+    'label': _pd_dt.strftime('%m-%d') if _pd_dt else '',
     'items': _pd_items,
     # 缺报汇总：窄条顶部一句话说清「几对停业 / 几对未提交 / 几对偏低」
     'status_count': {s: len([x for x in _pd_items if x['status'] == s])
