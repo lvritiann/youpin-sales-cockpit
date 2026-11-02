@@ -1372,7 +1372,10 @@ for _pn, _sts in PAIR_ST.items():
         else:
             _streak += 1                       # 仍在「最新连续空窗」内
     PAIR_DIAG[_pn] = {'streak': _streak,
-                      'avg7': round(sum(_vals) / len(_vals), 2) if _vals else 0.0}
+                      'avg7': round(sum(_vals) / len(_vals), 2) if _vals else 0.0,
+                      # ★ 实际参与统计的天数。文案要写「近 N 日平均销量」，
+                      #   N 必须真实 —— 新开或只营业三天的站不能硬写「近 7 日」。
+                      'n': len(_vals)}
 
 
 def _pair_status(t, diag):
@@ -1407,7 +1410,7 @@ if _pd_day:
         if _pn == XIAO:
             continue
         _a = _fuel_agg(_cell, _sts)
-        _diag = PAIR_DIAG.get(_pn) or {'streak': 0, 'avg7': 0.0}
+        _diag = PAIR_DIAG.get(_pn) or {'streak': 0, 'avg7': 0.0, 'n': 0}
         _stt = _pair_status(_a['t'], _diag)
         # ★ 不再 `if _a['t'] <= 0: continue` —— 停业 / 未提交的对必须留在图上，
         #   否则华山一关停就从 15 条里消失，外人分不清「没卖」还是「没报」。
@@ -1422,7 +1425,8 @@ if _pd_day:
             # 缺报/异常状态：normal / low（偏低）/ missing（未提交）/ closed（停业）
             'status': _stt,
             'streak': _diag['streak'],     # 连续无销量天数
-            'avg7': _diag['avg7'],         # 近 7 个有量日的日均
+            'avg7': _diag['avg7'],         # 近 N 个有量日的日均
+            'avg_n': _diag.get('n') or 0,  # 参与统计的天数（文案写「近 N 日」用）
             't92': round(_a['t92'], 2), 't95': round(_a['t95'], 2),
             't0': round(_a['t0'], 2), 't10': round(_a['t10'], 2),
             'gL': round(_a['gL'], 1), 'dL': round(_a['dL'], 1),
