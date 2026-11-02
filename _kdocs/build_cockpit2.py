@@ -176,26 +176,48 @@ def pack_month(mkey, raw):
     for c in cl:
         c['share'] = round(c['l'] / sum(x['l'] for x in cl) * 100, 1) if cl else 0
     ba = sum(c['amt'] for c in cl)
+
+    # ---- 精度与自洽（2026-11-02 全量整改）----------------------------------
+    # 原则：同一条加和链上的所有项统一精度（吨量 1 位、金额 2 位），
+    #       且总量由「已舍入的分项」逐项相加得出 —— 2 位 + 2 位仍是 2 位，
+    #       round 不再产生新误差，可做到严格相等。
+    # 反面教材：原来是 t / diesel / gas 各自 round(...,1)、ft 却从**未舍入**的
+    #       原始 t 算，导致「柴+汽 ≠ 总量」「零售+小额 ≠ 全口径」各差 0.1。
+    _t = round(t, 1)
+    _d = round(T.get('diesel', 0) or 0, 1)
+    _g_raw = round(T.get('gas', 0) or 0, 1)
+    # ★ 汽取「总量 − 柴」的余额，保证 柴+汽 严格等于总量。
+    #   仅当源表 t 与 d+g 的差 ≤ 0.5 吨时才做归集（视为舍入残差）；
+    #   差得更多说明源表本身没拆柴汽，保持原值不臆造，宁可让 recon 报警。
+    if abs((T.get('diesel', 0) or 0) + (T.get('gas', 0) or 0) - t) <= 0.5:
+        _g = round(_t - _d, 1)
+    else:
+        _g = _g_raw
+    _xt = round(raw.get('xiao', {}).get('t', 0) or 0, 1)
+    _ft = round(_t + _xt, 1)
+    _amt = round(T.get('amt', 0) or 0, 2)
+    _wan = round(T.get('wan', 0) or 0, 2)
+    _xamt = round(raw.get('xiao', {}).get('amt', 0) or 0, 2)
+    _xwan = round(raw.get('xiao', {}).get('wan', 0) or 0, 2)
+    _famt = round(_amt + _xamt, 2)
+    _fwan = round(_wan + _xwan, 2)
+
     return {
         'key': mkey, 'name': acct_name(mkey), 'range': acct_range_txt(mkey),
         # partial = 「还没走完的会计月」。只有当前会计月才算，历史月恒为完整。
         'partial': mkey == CUR_LABEL,
-        't': round(t, 1), 'diesel': round(T.get('diesel', 0), 1),
-        'gas': round(T.get('gas', 0), 1), 'amt': round(T.get('amt', 0), 1),
-        'wan': round(T.get('wan', 0), 1), 'days': T.get('days', len(raw.get('daily', []))),
+        't': _t, 'diesel': _d, 'gas': _g,
+        'amt': _amt, 'wan': _wan,
+        'days': T.get('days', len(raw.get('daily', []))),
         'price': round(T.get('amt', 0) * 1e4 / t) if t else 0,
         'stations': st, 'channels': ch, 'clients': cl,
-        'big_t': round(bt, 1), 'big_a': round(ba, 1),
+        'big_t': round(bt, 1), 'big_a': round(ba, 2),
         'big_share': round(bt / t * 100, 1) if t else 0,
         'big_ashare': round(ba / T.get('amt', 1) * 100, 1) if T.get('amt') else 0,
         'daily': raw.get('daily', []),
         'src': raw.get('sources', []),
-        'xt': round(raw.get('xiao', {}).get('t', 0), 1),
-        'xamt': round(raw.get('xiao', {}).get('amt', 0), 1),
-        'xwan': round(raw.get('xiao', {}).get('wan', 0), 1),
-        'ft': round(t + raw.get('xiao', {}).get('t', 0), 1),
-        'famt': round(T.get('amt', 0) + raw.get('xiao', {}).get('amt', 0), 1),
-        'fwan': round(T.get('wan', 0) + raw.get('xiao', {}).get('wan', 0), 1),
+        'xt': _xt, 'xamt': _xamt, 'xwan': _xwan,
+        'ft': _ft, 'famt': _famt, 'fwan': _fwan,
     }
 
 
@@ -502,24 +524,65 @@ _br_g = rb_sum(CUR_Y, _base_mons, 'm_gas')
 #   统一到日块后，15 对零售 + 小额 严格等于全口径，三处数字不再各说各话。
 _br_x = round(_acc(BASE_YM26, [XIAO], 't'), 2)
 
+# ---- 小额配送的柴/汽吨（全口径分项必须含它）---------------------------------
+# ★ 原来 full_d / full_g 只加零售的柴汽，小额那 4 万多吨整个漏在分项外面：
+#   全口径总量 150,187.0 而「柴+汽」只有 107,743.3，差 42,443.7 被当成算错。
+#   已完月取 SER（与「小额配送」实体同源），实时取日块的 xiao.diesel / xiao.gas。
+_br_xd, _br_xg = 0.0, 0.0
+for _ym in BASE_YM26:
+    _r = (SER['months'].get(_ym) or {}).get(XIAO) or {}
+    _br_xd += float(_r.get('d') or 0)
+    _br_xg += float(_r.get('g') or 0)
+_br_xd, _br_xg = round(_br_xd, 2), round(_br_xg, 2)
+live_xd = round(sum(float((CUR['sale'][str(int(d['d']))].get('xiao') or {}).get('diesel') or 0)
+                    for d in live_days), 2)
+live_xg = round(sum(float((CUR['sale'][str(int(d['d']))].get('xiao') or {}).get('gas') or 0)
+                    for d in live_days), 2)
+
+# ---- 总量定死、分项取余额（2026-11-02 整改）--------------------------------
+# 三项各自 round(...,1) 后相加必然对不上：实测 KPI 差 0.2 吨、2026-10 差 0.1 吨。
+# 现在总量单独算死，汽油 = 总量 − 柴油，从定义上保证 柴+汽 ≡ 总量，
+# 且残差 ≤ 0.05 吨、只落在汽油一侧，不会两头飘。
 disp_t = round(_br_t + live_t, 1)
 disp_d = round(_br_d + live_d, 1)
-disp_g = round(_br_g + live_g, 1)
+disp_g = round(disp_t - disp_d, 1)
 # 全口径 = 零售 + 小额（含当月实时那几天的小额，11 月可能为 0 但不能漏项）
-full_t = round(_br_t + _br_x + live_t + live_xt, 1)
-full_d = round(_br_d + live_d, 1)
-full_g = round(_br_g + live_g, 1)
+# ★ 必须用「已舍入的零售 / 小额分项相加」，不能从原始值另算一遍：
+#   1 位 + 1 位 = 1 位，round 不产生新误差，可做到全口径 ≡ 零售 + 小额 严格相等。
+_xiao_t1 = round(_br_x + live_xt, 1)
+_xiao_d1 = round(_br_xd + live_xd, 1)
+_xiao_g1 = round(_br_xg + live_xg, 1)
+full_t = round(disp_t + _xiao_t1, 1)
+full_d = round(disp_d + _xiao_d1, 1)
+full_g = round(full_t - full_d, 1)
 
 
-def acct_md(dayno):
-    """会计月日号 -> 真实月-日：>=26 落在上月，<26 落在本月"""
-    return '%02d-%02d' % ((LIVE_NO - 1) or 12, dayno) if dayno >= 26 else '%02d-%02d' % (LIVE_NO, dayno)
+def live_last_day():
+    """当前会计月「最新已填」的日号（取数用）。
+
+       ★ 绝对不能写 max(int(d['d']))：日号是会计月内的**循环编号**
+         （26→31 属上月，1→25 属本月），按数字取最大必然拿到 31，
+         而日期真正最新的往往是 1~25 里的某天。
+         2026-11-02 实测：日号 31 = 10-31、日号 1 = 11-01，
+         max(int) 取到 31，导致「截至 10-31」「昨日 = 419.5」两个错都出来了。
+       必须先用 acct_date 换成真实日期再比。"""
+    if not live_days:
+        return None
+    _c = [(acct_date(CUR_LABEL, int(d['d'])), d['d']) for d in live_days]
+    _c = [(dt, d) for dt, d in _c if dt]
+    return max(_c)[1] if _c else None
+
+
+def live_last_date():
+    """当前会计月「最新已填」的真实日期（展示用）。"""
+    _d = live_last_day()
+    return acct_date(CUR_LABEL, int(_d)) if _d else None
 
 
 prev_same, as_of = None, ''
 if live_days:
-    _last = max(int(d['d']) for d in live_days)
-    as_of = acct_md(_last)
+    _last_dt = live_last_date()
+    as_of = _last_dt.strftime('%m-%d') if _last_dt else ''
 
 # 同期基数 = 去年 1..N 月 + 去年同一会计月已过天数（从去年同月日报的日块取），保证分子分母同期
 _pd = FS.get('%d%02d' % (PRE_Y, LIVE_NO), {}).get('daily', {})
@@ -561,20 +624,35 @@ _xiao_wan = round(_acc(BASE_YM26, [XIAO], 'amt') / 1e4, 2)     # 含税万元
 _xiao_wan0 = round(_acc(BASE_YM26, [XIAO], 'wan'), 2)          # 不含税万元
 _retail_wan0 = round(_acc(BASE_YM26, ALL_REAL_ST, 'wan'), 2)   # 零售不含税万元
 _cur_wan = cur_wan
+
+# ★ 实时那几天的小额金额必须补进来 —— 原来只累加了已完月（1~10 月），
+#   11 月已填 7 天的小额 18.01 万元整个漏掉，导致「公司视角含税」比
+#   「ytd 全口径含税」多出 18.01 万，两边永远对不上（2026-11-02 实测）。
+_live_xamt = round(sum(float((CUR['sale'][str(int(d['d']))].get('xiao') or {}).get('amt') or 0)
+                       for d in live_days) / 1e4, 2)
+_live_xwan = round(sum(float((CUR['sale'][str(int(d['d']))].get('xiao') or {}).get('wan') or 0)
+                       for d in live_days), 2)
+
 _retail_net_all = round(_retail_wan0 + _cur_wan, 2)
-_xiao_net = _xiao_wan0
-_xiao_tax = _xiao_wan
+_xiao_net = round(_xiao_wan0 + _live_xwan, 2)
+_xiao_tax = round(_xiao_wan + _live_xamt, 2)
 
 yearly['ytd'] = {
     'year': CUR_Y, 'prev': PRE_Y,
     'base_months': [int(x) for x in _base_mons],
     'live_month': LIVE_NO, 'live_days': len(live_days), 'as_of': as_of,
+    # 当月实时部分的毛量（对账用：轨迹末行 / 月度表当前月 都必须等于它）
+    'live_t': round(live_t, 2), 'live_diesel': round(live_d, 2), 'live_gas': round(live_g, 2),
+    'live_xiao': round(live_xt, 2),
     'retail': {'t': disp_t, 'diesel': disp_d, 'gas': disp_g},
     'full': {'t': full_t, 'diesel': full_d, 'gas': full_g},
     'prev_same': prev_same, 'yoy': yoy_all,
     'prev_diesel': prev_d, 'prev_gas': prev_g, 'yoy_d': yoy_d, 'yoy_g': yoy_g,
-    'xiao_t': _br_x,
-    'xiao_share': round(_br_x / full_t * 100, 1) if full_t else 0,
+    'xiao_t': _xiao_t1,
+    'xiao_share': round(_xiao_t1 / full_t * 100, 1) if full_t else 0,
+    # 小额配送的柴/汽吨（全口径分项拆解用；零售口径不含）
+    'xiao_diesel': _xiao_d1,
+    'xiao_gas': _xiao_g1,
     'amt': {'total_wan': _amt_all, 'base_wan': _amt_base,
             'live_wan': round(cur_amt, 2), 'prev_wan': _amt_prev, 'yoy': _amt_yoy,
             # 零售不含税 / 小额（不含税·含税）/ 全口径四套值
@@ -985,22 +1063,28 @@ def build_view(name, road, sts):
             _days2 = FS.get('%d%02d' % (CUR_Y, _m_), {}).get('n_days') or 30
             _p2 = _acc(['%d%02d' % (PRE_Y, _m_)], sts, 't')
         mo[str(_m_)] = {'t': round(_t2, 1), 'diesel': round(_d2, 1), 'gas': round(_g2, 1),
-                        'amt': round(_a2, 1), 'wan': round(_w2, 1), 'days': _days2,
+                        'amt': round(_a2, 2), 'wan': round(_w2, 2), 'days': _days2,
                         'price': round(_a2 * 1e4 / _t2) if _t2 else 0,
                         'price0': round(_w2 * 1e4 / _t2) if _t2 else 0,
                         'prev': round(_p2, 1) if _p2 else None,
                         'yoy': _yoy(_t2, _p2) if _p2 else None}
 
+    # ★ 精度统一：吨量 1 位、金额 2 位，且汽 = 总量 − 柴。
+    #   视角层原来三项各自 round(...,1)，公司视角 150186.9 而「柴+汽」150187.0 差 0.1；
+    #   金额又是 1 位，与 ytd 的 2 位差 0.01 万元 —— 两处都会被当成算错。
+    _vt = round(t, 1)
+    _vd = round(d, 1)
+    _vg = round(_vt - _vd, 1)
     return {
         'name': name, 'road': road, 'n_st': len(sts), 'stations': list(sts),
-        't': round(t, 1), 'diesel': round(d, 1), 'gas': round(g, 1),
-        'amt': round(a, 1), 'wan': round(w, 1),
-        'damt': round(da, 1), 'gamt': round(ga, 1),
-        'dwan': round(dw, 1), 'gwan': round(gw, 1),
+        't': _vt, 'diesel': _vd, 'gas': _vg,
+        'amt': round(a, 2), 'wan': round(w, 2),
+        'damt': round(da, 2), 'gamt': round(ga, 2),
+        'dwan': round(dw, 2), 'gwan': round(gw, 2),
         'price': round(a * 1e4 / t) if t else 0,
         'price0': round(w * 1e4 / t) if t else 0,
         'prev': {'t': round(pt, 1), 'diesel': round(pd_, 1), 'gas': round(pg, 1),
-                 'amt': round(pa, 1), 'wan': round(pw, 1)},
+                 'amt': round(pa, 2), 'wan': round(pw, 2)},
         'yoy': {'t': _yoy(t, pt), 'diesel': _yoy(d, pd_), 'gas': _yoy(g, pg),
                 'amt': _yoy(a, pa), 'wan': _yoy(w, pw)},
         'avg30': round(tot30 / 30, 1) if d30 else 0,
@@ -1041,6 +1125,28 @@ VIEW_CO['sub'] = sorted([{'name': _pn, 't': _v['t'], 'diesel': _v['diesel'],
                           'gas': _v['gas'], 'amt': _v['amt'], 'wan': _v['wan'],
                           'share': _v['share'], 'yoy': _v['yoy']['t']}
                          for _pn, _v in VIEW_PAIR.items()], key=lambda x: -x['t'])
+
+# ★ 公司视角的金额一律取「各对之和」：公司自身再 round 一次会与 Σ各对 差 0.03 万元
+#   （2026-11-02 实测），页面上「公司 113,899.99」与「各对加总 113,900.02」并排时
+#   会被当成算错。吨量本来就相等（recon 已 PASS），只统一金额即可。
+VIEW_CO['amt'] = round(sum(x['amt'] for x in VIEW_CO['sub']), 2)
+VIEW_CO['wan'] = round(sum(x['wan'] for x in VIEW_CO['sub']), 2)
+
+# ---- 全口径产值以「各对之和」为唯一权威 ----------------------------------
+# 页面会把「公司合计」与「各对加总」并排，两条独立 round 必然差 0.01~0.03 万元。
+# 这里反过来：先定 full_tax = Σ各对，再由它减出零售 / 小额的含税与不含税，
+# 于是 full ≡ retail + xiao ≡ Σ各对 三条恒等同时成立，一分不差。
+_am = yearly['ytd']['amt']
+_am['full_tax'] = VIEW_CO['amt']
+_am['full_net'] = VIEW_CO['wan']
+_xa_tax = round(sum(x['amt'] for x in VIEW_CO['sub'] if x['name'] == XIAO), 2)
+_xa_net = round(sum(x['wan'] for x in VIEW_CO['sub'] if x['name'] == XIAO), 2)
+_am['xiao_tax'] = _xa_tax
+_am['xiao_net'] = _xa_net
+_am['total_wan'] = round(_am['full_tax'] - _xa_tax, 2)
+_am['retail_net'] = round(_am['full_net'] - _xa_net, 2)
+# 基数 = 零售含税 − 当月实时（余额法，保证 base + live = total 恒成立）
+_am['base_wan'] = round(_am['total_wan'] - _am['live_wan'], 2)
 
 # 渠道结构的公司基准线：单站视角下与该均值对照，才看得出「结构差异」
 _co_chan = {c['name']: c['share'] for c in VIEW_CO['chan']}
@@ -1220,7 +1326,48 @@ def _price(amount, litres):
     return round(amount / litres, 3) if litres else None
 
 
-_pd_day = max(cur_days, key=lambda x: int(x)) if cur_days else None
+# ---- 缺报诊断：每对「连续无销量天数」与「近 7 个有量日的日均」 -----------------
+# 为什么要它：原来 t<=0 的对直接 continue 掉，图上只剩 13 条，华山（停业）凭空消失，
+# 用户没法一眼看出「是没卖还是没报」。现在全部保留并带 status。
+#   closed  停业     连续 ≥2 个会计日无销量
+#   missing 未提交   当日无销量、但前一天还有
+#   low     异常偏低 当日有量，但不足近 7 个有量日均值的 30%
+#   normal  正常
+_days_desc = sorted([d for d in (CUR.get('sale') or {}) if acct_date(CUR_LABEL, int(d))],
+                    key=lambda x: acct_date(CUR_LABEL, int(x)), reverse=True)
+PAIR_DIAG = {}
+for _pn, _sts in PAIR_ST.items():
+    if _pn == XIAO:
+        continue
+    _streak, _vals, _started = 0, [], False
+    for _d in _days_desc:
+        _cs = (CUR['sale'][_d].get('stations') or {})
+        _vt = sum(float((_cs.get(s) or {}).get('t') or 0) for s in _sts)
+        if _vt > 0:
+            _started = True
+            _vals.append(_vt)
+            if len(_vals) >= 7:
+                break
+        elif _started:
+            break                              # 已跨过有量区间，再往前不必看
+        else:
+            _streak += 1                       # 仍在「最新连续空窗」内
+    PAIR_DIAG[_pn] = {'streak': _streak,
+                      'avg7': round(sum(_vals) / len(_vals), 2) if _vals else 0.0}
+
+
+def _pair_status(t, diag):
+    if t <= 0:
+        return 'closed' if diag['streak'] >= 2 else 'missing'
+    if diag['avg7'] > 0 and t < diag['avg7'] * 0.3:
+        return 'low'
+    return 'normal'
+
+
+# ★ 与 as_of 同源：走 live_last_day() 按真实日期取，不能 max(int)。
+#   之前这里取到日号 31（= 10-31 的 419.5 吨），而 prev_day.label 用的
+#   LAST_DT 是真实日期（11-01），于是卡片出现「标签 11-01、数字是 10-31」的错位。
+_pd_day = live_last_day() if cur_days else None
 _pd_items, _pd_x, _xiao_item = [], None, None
 _pd_sum = {'t': 0.0, 'gas': 0.0, 'diesel': 0.0, 'gL': 0.0, 'dL': 0.0, 'gA': 0.0, 'dA': 0.0}
 if _pd_day:
@@ -1229,8 +1376,10 @@ if _pd_day:
         if _pn == XIAO:
             continue
         _a = _fuel_agg(_cell, _sts)
-        if _a['t'] <= 0:
-            continue
+        _diag = PAIR_DIAG.get(_pn) or {'streak': 0, 'avg7': 0.0}
+        _stt = _pair_status(_a['t'], _diag)
+        # ★ 不再 `if _a['t'] <= 0: continue` —— 停业 / 未提交的对必须留在图上，
+        #   否则华山一关停就从 15 条里消失，外人分不清「没卖」还是「没报」。
         _f = _FLOW.get(_pn) or {}
         _pd_items.append({
             'name': _pn,
@@ -1239,6 +1388,10 @@ if _pd_day:
             'g': round(_a['gas'], 1),      # 汽油吨
             'd': round(_a['diesel'], 1),   # 柴油吨
             't': round(round(_a['gas'], 1) + round(_a['diesel'], 1), 1),
+            # 缺报/异常状态：normal / low（偏低）/ missing（未提交）/ closed（停业）
+            'status': _stt,
+            'streak': _diag['streak'],     # 连续无销量天数
+            'avg7': _diag['avg7'],         # 近 7 个有量日的日均
             't92': round(_a['t92'], 2), 't95': round(_a['t95'], 2),
             't0': round(_a['t0'], 2), 't10': round(_a['t10'], 2),
             'gL': round(_a['gL'], 1), 'dL': round(_a['dL'], 1),
@@ -1254,7 +1407,9 @@ if _pd_day:
         })
         for k in _pd_sum:
             _pd_sum[k] += _a[k]
-    _pd_items.sort(key=lambda x: -x['t'])
+    # 正常在前、异常居中、缺报垫底；同类内部按吨量降序
+    _ORD = {'normal': 0, 'low': 1, 'missing': 2, 'closed': 3}
+    _pd_items.sort(key=lambda x: (_ORD.get(x['status'], 0), -x['t']))
     # 小额配送：同样可拆柴汽（源表 -10/0/92/95 四列齐全），独立成第 16 项
     _xr = CUR['sale'][_pd_day].get('xiao') or {}
     _xt = round(float(_xr.get('t') or 0), 1)
@@ -1270,6 +1425,13 @@ prev_day = {
     'date': LAST_DT.isoformat() if LAST_DT else '',
     'label': LAST_DT.strftime('%m-%d') if LAST_DT else '',
     'items': _pd_items,
+    # 缺报汇总：窄条顶部一句话说清「几对停业 / 几对未提交 / 几对偏低」
+    'status_count': {s: len([x for x in _pd_items if x['status'] == s])
+                     for s in ('normal', 'low', 'missing', 'closed')},
+    'status_list': {s: [{'name': x['name'], 't': x['t'], 'avg7': x['avg7'],
+                         'streak': x['streak']}
+                        for x in _pd_items if x['status'] == s]
+                    for s in ('low', 'missing', 'closed')},
     'xiao': _pd_x,
     # 合计一律走「卡片上已取整的汽+柴」逐项相加，保证 15 对合计 == 汽油合计 + 柴油合计；
     # 不用 _pd_sum 的原始值，那会和卡片分项差 0.1，被当成算错。
