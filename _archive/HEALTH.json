@@ -1,14 +1,14 @@
 {
   "ok": true,
-  "checked_at": "2026-11-01 00:30:46",
+  "checked_at": "2026-11-02 00:31:00",
   "current_month": "2026-11",
   "current_span": "2026-10-26 ~ 2026-11-25",
-  "current_days": 6,
+  "current_days": 7,
   "current_expected": 31,
   "current_status": "running",
   "months_total": 1,
   "incomplete_months": [],
   "last_good_acct": "2026-11",
-  "last_good_days": 6,
+  "last_good_days": 7,
   "alert": null
 }
