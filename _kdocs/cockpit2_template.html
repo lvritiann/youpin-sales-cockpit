@@ -1830,7 +1830,7 @@ function pdCard(it, rs) {
   const sep = '<span class="sep">·</span>';
   /* ★ 无销量的对（停业 / 未提交）走简版卡片：不出柴汽、均价、车流三行。
      理由 —— 那几格在当日没有意义，车流还是 _flow.json 上一次的快照（华山停在 10-28），
-     摆上去会被读成「停业了还在跑 883 车次」。只留状态、连续天数、停报前日均，
+     摆上去会被读成「停业了还在跑 883 车次」。只留状态、连续天数、近 N 日平均销量，
      既保证 15 对齐全可比，又不让旧数据冒充当日值。 */
   if (zero) {
     const _why = (ST === 'closed')
@@ -1839,13 +1839,13 @@ function pdCard(it, rs) {
     const _tag = stTxt || '未提交';
     return `<div class="pdc zero st-${ST || 'missing'}${it.name === '小额配送' ? ' vx' : ''}"`
       + ` title="${it.name}（${_tag}）&#10;${_why}`
-      + (it.avg7 ? `&#10;停报前 7 日均值：${_f1(it.avg7)} 吨` : '') + `">`
+      + (it.avg7 ? `&#10;近 ${it.avg_n || 7} 日平均销量：${_f1(it.avg7)} 吨` : '') + `">`
       + `<svg class="pdp" viewBox="0 0 44 44">${pdPie([], rs.it.map(s => s.c))}</svg>`
       + '<div class="pdm">'
       +   `<div class="pdn"><span class="nm">${it.name}<i class="pdb">${_tag}</i></span>`
       +     `<span class="pdr">—</span></div>`
       +   `<div class="pdv pdwhy">${_why}</div>`
-      +   `<div class="pdv pdavg"><span class="k">停报前日均</span> `
+      +   `<div class="pdv pdavg"><span class="k">近 ${it.avg_n || 7} 日平均</span> `
       +     `<b>${it.avg7 ? _f1(it.avg7) : '—'}</b><span class="u"> 吨</span></div>`
       +   `<div class="pdv pdnone"><span class="u">当日无销量 · 无车流</span></div>`
       + '</div></div>';
@@ -1853,7 +1853,7 @@ function pdCard(it, rs) {
   return `<div class="pdc${zero ? ' zero' : ''}${stCls}${it.name === '小额配送' ? ' vx' : ''}"`
     + ` title="${it.name}${stTxt ? '（' + stTxt + '）' : ''}`
     + (zero && it.streak ? `&#10;已连续 ${it.streak} 天无销量上报` : '')
-    + (it.avg7 ? `&#10;停业/缺报前 7 日均值：${_f1(it.avg7)} 吨` : '')
+    + (it.avg7 ? `&#10;近 ${it.avg_n || 7} 日平均销量：${_f1(it.avg7)} 吨` : '')
     + `&#10;销量：汽油 ${gTxt} 吨 · 柴油 ${dTxt} 吨 · 合计 ${sumTxt} 吨`
     + `&#10;平均单价：汽油 ${pTxt(it.gp)} 元/升 · 柴油 ${pTxt(it.dp)} 元/升`
     + (hasFlow
