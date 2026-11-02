@@ -92,6 +92,10 @@
     background:var(--line)}
   .kpi .k{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--sub);font-weight:500}
   .kpi .k .per{color:#6f839c;font-weight:400;margin-left:1px}
+  /* 口径徽标：仅零售 / 全口径。以前只靠开关暗示，容易把 10.77 万当成全公司数去比。 */
+  .kpi .k .ktag{font-size:10.5px;line-height:1;padding:2px 5px;border-radius:3px;
+    margin-left:5px;letter-spacing:.3px;vertical-align:1px;white-space:nowrap;
+    color:#e8cf95;background:rgba(190,150,70,.18);border:1px solid rgba(200,160,80,.42)}
   .kpi .k svg{width:14px;height:14px;flex:none;fill:none;stroke:var(--gold);
     stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
   .kpi .v{font-size:30px;font-weight:700;letter-spacing:-1px;line-height:1.05;margin-top:10px;
@@ -151,6 +155,25 @@
   .pdbar{padding:10px 0 11px;margin:2px 0 12px;font-size:13px;line-height:1.55;
     border-top:1px solid #14263a;border-bottom:1px solid #14263a;color:#93aac4}
   .pdbar:empty{display:none}
+  /* ★ 缺报 / 异常态：卡片不隐藏，用红/琥珀高亮 + 徽标与正常站区分。
+     停业、未提交是「红」，异常偏低是「琥珀」，两者都看得见但不混淆。 */
+  .pdc.st-closed{background:rgba(192,57,43,.16);box-shadow:inset 0 0 0 1px rgba(224,102,90,.62)}
+  .pdc.st-missing{background:rgba(192,57,43,.11);box-shadow:inset 0 0 0 1px rgba(224,102,90,.45)}
+  .pdc.st-low{background:rgba(183,121,31,.13);box-shadow:inset 0 0 0 1px rgba(214,168,80,.5)}
+  .pdc.st-closed .nm,.pdc.st-missing .nm{color:#ff9a8c}
+  .pdb{font-style:normal;font-size:10.5px;line-height:1;padding:2px 5px;border-radius:3px;
+       margin-left:5px;background:#c0392b;color:#fff;letter-spacing:.3px;
+       vertical-align:1px;white-space:nowrap}
+  .st-low .pdb{background:#b7791f}
+  .pdab{background:#c0392b;color:#fff;border-radius:3px;padding:1px 6px;
+        font-weight:600;font-size:11.5px;letter-spacing:.3px}
+  .pdab.low{background:#b7791f}
+  .pdabw b{font-weight:600;color:inherit}
+  /* 停业/未提交简版卡片：行距略松，避免三行挤在 44px 内不可读 */
+  .pdc.zero .pdwhy{color:#ff9a8c;font-weight:600}
+  .pdc.st-missing.zero .pdwhy{color:#f0b3aa}
+  .pdc.zero .pdavg b{color:#e8cf95}
+  .pdc.zero .pdnone{opacity:.72}
 
   /* ---- 头行：日期 / 合计 / 比项切换 / 单位legend ---- */
   .pdhead{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;margin-bottom:8px}
@@ -182,6 +205,10 @@
     padding:6px 7px 6px 6px;border-radius:8px;background:#0b1622;
     border:1px solid #14243a}
   .pdc.zero{opacity:.42}
+  /* ★ 停业 / 未提交要「醒目」而不是「隐去」：覆盖上面 .pdc.zero 的 0.42 透明度。
+     原来零销量卡统一压到 42% 透明，是为了「未拆柴汽」的空环不抢眼；
+     但停业站是**要被人看见**的，压暗就失去标注意义。 */
+  .pdc.zero.st-closed,.pdc.zero.st-missing{opacity:1}
   .pdc.vx{border-color:#3b3018;background:#12100a}     /* 历史遗留：小额卡已不在本模块展示 */
   /* 圆环 44 → 54px（2026-10-29 按用户要求放大）：
      viewBox 固定 0 0 44 44，只改 CSS 尺寸 → 内部环径与线宽同比缩放，
@@ -1318,9 +1345,9 @@ document.querySelectorAll('#winbtns button').forEach(b => b.onclick = () => {
    柴/汽在单站视角额外给「产值」：一对站里柴油可能只占两成，
    只看吨数看不出它到底挣不挣钱。 */
 function kpiCards(defs) {
-  return defs.map(([k2, v, u, t, ic, cls, per], i) => `
+  return defs.map(([k2, v, u, t, ic, cls, per, tag], i) => `
     <div class="kpi" style="--i:${i}">
-      <div class="k">${ICON[ic] || ''}${k2}${per ? `<span class="per">${per}</span>` : ''}</div>
+      <div class="k">${ICON[ic] || ''}${k2}${tag ? `<span class="ktag">${tag}</span>` : ''}${per ? `<span class="per">${per}</span>` : ''}</div>
       <div class="v ${cls || ''}">${v}${u ? `<small>${u}</small>` : ''}</div>
       <div class="t${ic === 'trend' ? ' tiny' : ''}">${t}</div>
     </div>`).join('');
@@ -1372,14 +1399,17 @@ function ytdKpi() {
     const wTot = ds.reduce((a, d) => a + _vt(d), 0);
     const wAvg = ds.length ? wTot / ds.length : 0;
     const wPeak = Math.max(...ds.map(_vt), 0);
+    /* ★ 口径徽标：这三个大数在「仅零售」下是 10.77 万，切到「全口径」是 15.02 万，
+       以前只靠开关状态暗示，很容易拿其中一个去和公司合计比对、得出「对不上」的结论。 */
+    const scTag = isFull ? '全口径' : '仅零售';
     return kpiCards([
       ['全年累计销量', n(c.t), '吨',
-       `截至 ${y.as_of || '—'} · ${m0}–${m1} 月 + ${liveTxt}`, 'drop', '', per],
+       `截至 ${y.as_of || '—'} · ${m0}–${m1} 月 + ${liveTxt}`, 'drop', '', '', scTag],
       ['柴油累计', n(c.diesel), '吨',
-       `占 ${(c.diesel / base * 100).toFixed(1)}%${oilLbl} · ${yoyTxt(y.yoy_d, y.prev_diesel)}`, 'oil', ''],
+       `占 ${(c.diesel / base * 100).toFixed(1)}%${oilLbl} · ${yoyTxt(y.yoy_d, y.prev_diesel)}`, 'oil', '', '', scTag],
       ['汽油累计', n(c.gas), '吨',
-       `占 ${(c.gas / base * 100).toFixed(1)}%${oilLbl} · ${yoyTxt(y.yoy_g, y.prev_gas)}`, 'fuel', ''],
-      ['产值金额', n(amtVal), '万元', `${amtNote} · 同比 ${amtYoy(amtYoyV)}`, 'cash', ''],
+       `占 ${(c.gas / base * 100).toFixed(1)}%${oilLbl} · ${yoyTxt(y.yoy_g, y.prev_gas)}`, 'fuel', '', '', scTag],
+      ['产值金额', n(amtVal), '万元', `${amtNote} · 同比 ${amtYoy(amtYoyV)}`, 'cash', '', '', scTag],
       ['累计销量同比', pctTxt(yv), '',
        `${y.prev} 年同期 ${pv} 吨 · 净增 ${diff === null ? '—' : (diff >= 0 ? '+' : '') + n(diff)} 吨`,
        'trend', yv === null ? '' : (yv >= 0 ? 'hl-up' : 'hl-dn')],
@@ -1783,16 +1813,47 @@ function pdCard(it, rs) {
   const un = !!it.un || tot <= 0;                 // 源表未拆柴汽 → 空环，不臆造比例
   const rt = un ? '—' : pdRatioTxt(vals);
   const zero = !(it.t > 0);
+  /* ★ 缺报/异常状态（build 侧判定）：normal / low / missing / closed。
+     停业、未提交的对**不隐藏**，留在图里用红框标出来 —— 否则华山一关停就从 15 条消失，
+     外人分不清「没卖」还是「没报」，也没法和其它站横向比。 */
+  const ST = it.status || (zero ? 'missing' : 'normal');
+  const stTxt = ({ closed: '停业', missing: '未提交', low: '偏低' })[ST] || '';
+  const stCls = stTxt ? (' st-' + ST) : '';
   /* 车流/单加全部来自各站 V1「今日填报」前一日两行实报值，不加约等号 */
   const hasFlow = (it.fv != null);
   const gTxt = un ? '—' : _f1(it.g);
   const dTxt = un ? '—' : _f1(it.d);
-  /* t 在 build 端已按「汽+柴（均取 1 位）相加」算好，直接显示即自洽 */
-  const sumTxt = _f1(it.t);
+  /* t 在 build 端已按「汽+柴（均取 1 位）相加」算好，直接显示即自洽。
+     无销量的对显示 — 而不是 0.0：0.0 会被读成「卖了 0 吨」，与「没报」混为一谈。 */
+  const sumTxt = zero ? '—' : _f1(it.t);
   const pTxt = (v) => v == null ? '—' : v.toFixed(2);
   const sep = '<span class="sep">·</span>';
-  return `<div class="pdc${zero ? ' zero' : ''}${it.name === '小额配送' ? ' vx' : ''}"`
-    + ` title="${it.name}`
+  /* ★ 无销量的对（停业 / 未提交）走简版卡片：不出柴汽、均价、车流三行。
+     理由 —— 那几格在当日没有意义，车流还是 _flow.json 上一次的快照（华山停在 10-28），
+     摆上去会被读成「停业了还在跑 883 车次」。只留状态、连续天数、停报前日均，
+     既保证 15 对齐全可比，又不让旧数据冒充当日值。 */
+  if (zero) {
+    const _why = (ST === 'closed')
+      ? `连续 ${it.streak || 0} 天无销量`
+      : '当日未上报销量';
+    const _tag = stTxt || '未提交';
+    return `<div class="pdc zero st-${ST || 'missing'}${it.name === '小额配送' ? ' vx' : ''}"`
+      + ` title="${it.name}（${_tag}）&#10;${_why}`
+      + (it.avg7 ? `&#10;停报前 7 日均值：${_f1(it.avg7)} 吨` : '') + `">`
+      + `<svg class="pdp" viewBox="0 0 44 44">${pdPie([], rs.it.map(s => s.c))}</svg>`
+      + '<div class="pdm">'
+      +   `<div class="pdn"><span class="nm">${it.name}<i class="pdb">${_tag}</i></span>`
+      +     `<span class="pdr">—</span></div>`
+      +   `<div class="pdv pdwhy">${_why}</div>`
+      +   `<div class="pdv pdavg"><span class="k">停报前日均</span> `
+      +     `<b>${it.avg7 ? _f1(it.avg7) : '—'}</b><span class="u"> 吨</span></div>`
+      +   `<div class="pdv pdnone"><span class="u">当日无销量 · 无车流</span></div>`
+      + '</div></div>';
+  }
+  return `<div class="pdc${zero ? ' zero' : ''}${stCls}${it.name === '小额配送' ? ' vx' : ''}"`
+    + ` title="${it.name}${stTxt ? '（' + stTxt + '）' : ''}`
+    + (zero && it.streak ? `&#10;已连续 ${it.streak} 天无销量上报` : '')
+    + (it.avg7 ? `&#10;停业/缺报前 7 日均值：${_f1(it.avg7)} 吨` : '')
     + `&#10;销量：汽油 ${gTxt} 吨 · 柴油 ${dTxt} 吨 · 合计 ${sumTxt} 吨`
     + `&#10;平均单价：汽油 ${pTxt(it.gp)} 元/升 · 柴油 ${pTxt(it.dp)} 元/升`
     + (hasFlow
@@ -1801,7 +1862,7 @@ function pdCard(it, rs) {
         : `&#10;前一日车流：无数据`) + `">`
     + `<svg class="pdp" viewBox="0 0 44 44">${pdPie(un ? [] : vals, rs.it.map(s => s.c))}</svg>`
     + '<div class="pdm">'
-    +   `<div class="pdn"><span class="nm">${it.name}</span><span class="pdr">${rt}</span></div>`
+    +   `<div class="pdn"><span class="nm">${it.name}${stTxt ? `<i class="pdb">${stTxt}</i>` : ''}</span><span class="pdr">${rt}</span></div>`
     // ① 分油品吨 + 合计吨（单位只在行尾出一次，省出宽度给「合计」）
     +   `<div class="pdv"><span class="k">汽</span><span class="gg">${gTxt}</span>`
     +     ` <span class="k">柴</span><span class="dd">${dTxt}</span>`
@@ -1880,8 +1941,7 @@ function renderPd(P) {
     h += `<span class="pdk">其中 <span style="color:#e0b96a">汽油 ${n(sumG)}</span>`
       + ` + <span style="color:#6fa8e8">柴油 ${n(sumD)}</span> 吨</span>`;
   }
-  if (!P && PD.flow_veh != null) {
-    const ck = PD.flow_check || {};
+  if (!P && PD.flow_veh != null) {    const ck = PD.flow_check || {};
     h += `<span class="pdk">前一日总车次 <b class="pdt">${_i0(PD.flow_veh)}</b>`
       + `（<span style="color:#e0b96a">汽 ${_i0(ck.gasVeh)}</span>`
       + ` / <span style="color:#6fa8e8">柴 ${_i0(ck.dieVeh)}</span>）</span>`;
@@ -1889,6 +1949,23 @@ function renderPd(P) {
   if (gp != null || dp != null) {
     h += `<span class="pdk">平均单价 <span style="color:#e0b96a">汽 ${gp == null ? '—' : gp.toFixed(2)}</span>`
       + ` / <span style="color:#6fa8e8">柴 ${dp == null ? '—' : dp.toFixed(2)}</span> 元/L</span>`;
+  }
+  /* ★ 缺报汇总：一眼看出「有几对没报、分别是谁」。不隐藏、只标注 —— 保证 15 对恒可比。 */
+  if (!P) {
+    const sc = PD.status_count || {};
+    const sl = PD.status_list || {};
+    const abn = [];
+    if (sc.closed) abn.push(`<span class="pdab">停业 ${sc.closed}</span>`);
+    if (sc.missing) abn.push(`<span class="pdab">未提交 ${sc.missing}</span>`);
+    if (sc.low) abn.push(`<span class="pdab low">偏低 ${sc.low}</span>`);
+    if (abn.length) {
+      const nm = [].concat(
+        (sl.closed || []).map(x => x.name + ' 停业'),
+        (sl.missing || []).map(x => x.name + ' 未提交'),
+        (sl.low || []).map(x => x.name + ' 偏低')
+      ).join('、');
+      h += `<span class="pdk pdabw" title="${nm}">缺报 ${abn.join(' · ')}</span>`;
+    }
   }
   h += '<span class="pdseg" id="pd_ri">'
     + PD_RATIO.map((s, i) => `<button data-ri="${i}" class="${i === PDRI ? 'on' : ''}">${s.n}</button>`).join('')
