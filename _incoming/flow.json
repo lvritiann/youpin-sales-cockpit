@@ -12,7 +12,17 @@
   "gasVeh": 3867,
   "dieVeh": 2387,
   "gasPer": 33.82,
-  "diePer": 233.42
+  "diePer": 233.42,
+  "company": {
+   "gasVeh": 3867,
+   "dieVeh": 2387,
+   "veh": 6254
+  },
+  "delta": {
+   "veh": 0,
+   "gas": 0,
+   "diesel": 0
+  }
  },
  "pairs": {
   "秦岭": {
