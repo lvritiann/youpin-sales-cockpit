@@ -1815,14 +1815,19 @@ function custAgg(w) {
     for (const c of (m.clients || [])) {
       const x = cl[c.name] || (cl[c.name] = { name: c.name, t: 0, amt: 0, l: 0 });
       x.t += c.t || 0; x.amt += c.amt || 0; x.l += c.l || 0;
+      if (c.alias && !x.alias) x.alias = c.alias;   // ★ 聚合时别把「曾用名」丢掉
     }
     for (const c of (m.channels || [])) {
       const x = ch[c.name] || (ch[c.name] = { name: c.name, t: 0 });
       x.t += c.t || 0;
     }
   }
-  const clients = Object.keys(cl).map(k => ({ name: k, l: +cl[k].l.toFixed(1),
-    t: +cl[k].t.toFixed(1), amt: +cl[k].amt.toFixed(2) })).sort((a, b) => b.t - a.t);
+  const clients = Object.keys(cl).map(k => {
+    const o = { name: k, l: +cl[k].l.toFixed(1),
+      t: +cl[k].t.toFixed(1), amt: +cl[k].amt.toFixed(2) };
+    if (cl[k].alias) o.alias = cl[k].alias;
+    return o;
+  }).sort((a, b) => b.t - a.t);
   const bigT = +clients.reduce((s, x) => s + x.t, 0).toFixed(1);
   const bigA = +clients.reduce((s, x) => s + x.amt, 0).toFixed(2);
   clients.forEach(c => { c.share = bigT ? +(c.t / bigT * 100).toFixed(1) : 0; });
@@ -2442,6 +2447,19 @@ function render() {
         + `同比 <b>${pctTxt(A.yoy.pct)}</b>`);
     if (A.bad.length)
       notes.push(`⚠ 源表「大客户合计」槽与客户槽不符：${A.bad.join('、')}，出数已按客户槽之和修正`);
+    /* 改名客户已按业务确认归并（CUST_ALIAS），这里把「现用名（原曾用名）」标出来，
+       免得有人拿历史报表对不上号。 */
+    const alHit = A.clients.filter(c => c.alias);
+    if (alHit.length)
+      notes.push(`改名客户已归并：<b>${alHit.map(c => c.name + '（原' + c.alias + '）').join('、')}</b>`);
+    /* 客户名审计：实时月与上一个 xlsx 月对比出「历史没有的名字 / 历史有本月没了」。
+       只在窗口含实时月时提示 —— 选 2025 年时这条与人无关。 */
+    const NA = (D.cust_hist || {}).name_audit;
+    if (A.n_live > 0 && NA && (NA.new.length || NA.gone.length)) {
+      notes.push(`⚠ ${NA.live} 出现历史未有的客户名 <b>${NA.new.join('、') || '—'}</b>`
+        + (NA.gone.length ? `，而 ${NA.prev} 有量的 <b>${NA.gone.join('、')}</b> 本月未出现` : '')
+        + `；若属同一家改名，请核对源表第 1 行表头`);
+    }
     $('#cust-note').innerHTML = notes.map(x => `<div>${x}</div>`).join('');
   } else {
     vCard(P);
