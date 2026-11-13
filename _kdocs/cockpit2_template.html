@@ -337,6 +337,15 @@
   .ci u{text-decoration:none;color:var(--sub);font-size:10.5px;width:40px;text-align:right}
   /* 产值子行：与上面「柴油 / 汽油」吨数行同栅格，缩进 + 降饱和，读成「这一项下面的金额」 */
   .ci.sub{font-size:11px;padding-left:0;margin-top:-4px}
+  /* 大客户构成的口径脚注：统计区间 + 两个分母 + 全年覆盖警示。
+     原来卡片上只有「主图客户 · 副图渠道 · 公司级口径」，看不出是哪一月、
+     也不知道图例 % 和副图 % 分母不同，容易被当成同一套占比。 */
+  .cust-note{margin-top:9px;font-size:10px;line-height:1.55;color:var(--sub)}
+  /* 每条脚注独立成 div：用 <br> 拼长行在 headless 缩放渲染下会出现字重叠 */
+  .cust-note>div{margin-top:2px}
+  .cust-note b{color:var(--gold2);font-weight:600}
+  #cust-span{font-size:10.5px;color:var(--sub);white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;max-width:380px}
   .ci.sub span{color:var(--sub);font-size:10.5px}
   .ci.sub b{font-size:11px;color:#b9cbdd;font-weight:600}
   .ci.sub u{font-size:9.5px}
@@ -963,7 +972,12 @@
 
   <div class="g12" id="custgrid">
     <div class="card s12">
-      <div class="h"><h2>大客户构成</h2><span>主图客户 · 副图渠道 · 公司级口径</span></div>
+      <div class="h"><h2>大客户构成</h2>
+        <div class="hright">
+          <select id="custsel" class="rdsel" title="切换全年累计或单个会计月"></select>
+          <span id="cust-span">主图客户 · 副图渠道 · 公司级口径</span>
+        </div>
+      </div>
       <div class="cust">
         <div class="donut-wrap">
           <div class="donut"><svg viewBox="0 0 42 42" id="cdonut"></svg>
@@ -975,6 +989,7 @@
           <div class="ttl">副图 · 大客户渠道在全口径中的位置</div>
           <div id="cmp"></div>
           <div class="ttl" id="cmp-t" style="margin:10px 0 0"></div>
+          <div class="cust-note" id="cust-note"></div>
         </div>
       </div>
     </div>
@@ -1117,6 +1132,11 @@ let TAX = 1, SCP = 'full', WIN = 30, MK = D.meta.month_order[0];
    与 MK（会计月轨迹当前选中月）相互独立 —— 那个管「本月信息带 / 明细表」，
    这个只管路段这一张图，两者不必联动（用户常想全年看分布、单月看波动）。 */
 let RDSEL = '';
+/* 大客户构成的观察窗口：'' = 跟随 MK（点「会计月轨迹」柱子会一起切），
+   'all' = 已有明细的会计月合计，'2026-09' 等 = 锁定该会计月。
+   ★ 用户一旦在下拉里显式选过，就固定住不跟随 MK —— 否则点一下轨迹柱子
+     就把手选的全年/单月冲掉，体验很别扭。 */
+let CUST_SEL = '';
 /* 前一日窄条的两个可配置项：比项（哪几种油品参与比值）/ 比值格式（10 分制 or 原值） */
 let PDRI = 0, PDFMT = '10';
 const XIAO_NAME = (D.yearly && D.yearly.xiao && D.yearly.xiao.name) || '小额配送';
@@ -1743,6 +1763,126 @@ function syncRdSel(P) {
   sel.value = RDSEL;
 }
 
+/* ---------- 大客户构成：观察窗口（会计年累计 / 单月） ----------
+   数据源 D.cust_hist.months 是 34 个 xlsx 会计月 + 当前实时月的同构月表，
+   字段与 months[MK] 一致（clients / channels / t / big_t / days / partial）。
+   单月与全年因此走同一套聚合，不会一边看本月、一边看别处的三个月。
+
+   CUST_SEL 三种值：
+     ''        跟随 MK（点「会计月轨迹」柱子会一起切）
+     'y:2026'  该会计年累计
+     '2026-09' 锁定该会计月
+   ★ 用户一旦在下拉里显式选过就固定住，不跟随 MK —— 否则点一下轨迹柱
+     就把手选的全年冲掉，很别扭。 */
+function custWindow() {
+  const CH = D.cust_hist || {}, M = CH.months || {}, Y = CH.years || {};
+  const mk = CUST_SEL || MK;
+  if (mk.indexOf('y:') === 0) {
+    const y = mk.slice(2), e = Y[y] || {};
+    const keys = (e.months || []).slice();
+    const ms = keys.map(k => M[k]).filter(Boolean);
+    const f = ms[0], l = ms[ms.length - 1];
+    const rng = (f && l)
+      ? `${((f.range || '').split(' ~ ')[0])} ~ ${((l.range || '').split(' ~ ')[1])}` : '';
+    return { kind: 'year', keys, months: ms, y,
+      short: `${y} 会计年累计`,
+      label: `${y} 会计年 · ${ms.length} 个会计月`,
+      range: rng };
+  }
+  const one = M[mk];
+  if (!one) return { kind: 'month', keys: [], months: [],
+    short: '无数据', label: '无数据', range: '' };
+  return { kind: 'month', keys: [mk], months: [one],
+    short: one.name + (one.partial ? `（进行中 ${one.days} 天）` : ''),
+    label: `${one.name} · ${one.range}`, range: one.range };
+}
+
+/* 把窗口内各月按客户名 / 渠道名累加。
+   ★ 精度：吨直接累加各月「已舍入」的 t，不从升重算 ——
+     保证环形图中心数 ≡ 各段之和，与 build 侧「总量定死、分项取余额」同一条铁律。
+   ★ 两个分母必须分开：主图 % 是客户明细内部占比；副图 % 是占零售口径总量
+     （渠道表本身不含小额配送，用含小额的全口径当分母会把每条渠道都算低）。 */
+function custAgg(w) {
+  const cl = {}, ch = {};
+  let tt = 0, ta = 0, days = 0, unT = 0, unN = 0, nLive = 0, nXlsx = 0, nPart = 0;
+  const bad = [];
+  for (const m of w.months) {
+    tt += m.t || 0; ta += m.amt || 0; days += m.days || 0;
+    unT += m.unnamed_t || 0; unN += m.unnamed_n || 0;
+    if (m.bad) bad.push(m.key);
+    if (m.partial) nPart++;
+    if (m.src === 'live') nLive++; else nXlsx++;
+    for (const c of (m.clients || [])) {
+      const x = cl[c.name] || (cl[c.name] = { name: c.name, t: 0, amt: 0, l: 0 });
+      x.t += c.t || 0; x.amt += c.amt || 0; x.l += c.l || 0;
+    }
+    for (const c of (m.channels || [])) {
+      const x = ch[c.name] || (ch[c.name] = { name: c.name, t: 0 });
+      x.t += c.t || 0;
+    }
+  }
+  const clients = Object.keys(cl).map(k => ({ name: k, l: +cl[k].l.toFixed(1),
+    t: +cl[k].t.toFixed(1), amt: +cl[k].amt.toFixed(2) })).sort((a, b) => b.t - a.t);
+  const bigT = +clients.reduce((s, x) => s + x.t, 0).toFixed(1);
+  const bigA = +clients.reduce((s, x) => s + x.amt, 0).toFixed(2);
+  clients.forEach(c => { c.share = bigT ? +(c.t / bigT * 100).toFixed(1) : 0; });
+  const totT = +tt.toFixed(1);
+  const channels = Object.keys(ch).map(k => ({ name: k, t: +ch[k].t.toFixed(1) }))
+    .sort((a, b) => b.t - a.t);
+  channels.forEach(c => { c.share = totT ? +(c.t / totT * 100).toFixed(1) : 0; });
+
+  /* 年度同比：只在「完整 12 个月的会计年、且不含进行中月份」时才给。
+     含未走完月份就宁可不算，也不拿部分年度去比完整年度（口径铁律 3）。 */
+  let yoy = null;
+  if (w.kind === 'year') {
+    const M = (D.cust_hist || {}).months || {};
+    const py = String(+w.y - 1);
+    const pk = w.keys.map(k => py + k.slice(4)).filter(k => M[k]);
+    const pt = +pk.reduce((s, k) => s + (M[k].big_t || 0), 0).toFixed(1);
+    const ok = !nPart && w.months.length === 12 && pk.length === 12;
+    yoy = { ok, year: py, prev_t: pt,
+      mx: w.keys.length ? Math.max.apply(null, w.keys.map(k => +k.slice(5))) : 0,
+      pct: (ok && pt) ? +((bigT - pt) / pt * 100).toFixed(1) : null };
+  }
+  return Object.assign({}, w, {
+    clients, channels, big_t: bigT, big_a: bigA,
+    total_t: totT, total_amt: +ta.toFixed(2), days,
+    big_share: totT ? +(bigT / totT * 100).toFixed(1) : 0,
+    big_ashare: ta ? +(bigA / ta * 100).toFixed(1) : 0,
+    unnamed_t: +unT.toFixed(1), unnamed_n: unN,
+    n_live: nLive, n_xlsx: nXlsx, n_partial: nPart, bad, yoy,
+  });
+}
+
+function syncCustSel(P) {
+  const sel = $('#custsel');
+  if (!sel) return;
+  if (P) { sel.style.display = 'none'; return; }
+  sel.style.display = '';
+  const CH = D.cust_hist || {}, M = CH.months || {}, Y = CH.years || {};
+  if (CUST_SEL) {   // 数据里没有这个月 / 这个年 → 退回「跟随当前会计月」
+    const ok = CUST_SEL.indexOf('y:') === 0 ? !!Y[CUST_SEL.slice(2)] : !!M[CUST_SEL];
+    if (!ok) CUST_SEL = '';
+  }
+  if (!sel.dataset.built) {
+    const ys = Object.keys(Y).sort().reverse();
+    let html = `<option value="">跟随当前会计月</option>`;
+    html += `<optgroup label="会计年累计">` + ys.map(y =>
+      `<option value="y:${y}">${y} 会计年累计 · ${Y[y].n} 个月</option>`).join('')
+      + `</optgroup>`;
+    html += ys.map(y => `<optgroup label="${y} 会计年 · 逐月">`
+      + (Y[y].months || []).slice().reverse().map(k => {
+          const one = M[k] || {};
+          return `<option value="${k}">${k} · ${one.name || ''}`
+            + (one.partial ? `（进行中 ${one.days} 天）` : '') + `</option>`;
+        }).join('') + `</optgroup>`).join('');
+    sel.innerHTML = html;
+    sel.dataset.built = '1';
+    sel.onchange = () => { CUST_SEL = sel.value; render(); };
+  }
+  sel.value = CUST_SEL;
+}
+
 /* ---------- 会计月轨迹序列 ----------
    公司视角直接用 payload 里按公司算好的 6 个月（带小额段）；
    单站视角用该实体自己的 months（同一会计月、同一算法），小额段恒为 0
@@ -2228,32 +2368,81 @@ function render() {
   const cust = $('#custgrid'), vg = $('#vgrid');
   if (cust) cust.style.display = P ? 'none' : '';
   if (vg) vg.style.display = P ? '' : 'none';
+  syncCustSel(P);
 
   if (!P) {
+    /* 观察窗口由下拉决定（会计年累计 / 单月），CUST_SEL='' 时跟随 MK。
+       数据统一来自 D.cust_hist，单月与全年走同一套聚合。 */
+    const A = custAgg(custWindow());
     /* ★ 客户表头为空的行已统一归入「其他」。它不该占前 5 名图例的位置，
        而要并进末尾的「其他客户」聚合段 —— 否则会出现「其他」和「其他客户」两行。 */
     const OTH = '其他';
-    const namedCl = m.clients.filter(c => c.name !== OTH);
-    const othT = m.clients.filter(c => c.name === OTH).reduce((s, x) => s + (x.t || 0), 0);
+    const namedCl = A.clients.filter(c => c.name !== OTH);
+    const othT = A.clients.filter(c => c.name === OTH).reduce((s, x) => s + (x.t || 0), 0);
     const clTop = namedCl.slice(0, 5);
-    const clOther = namedCl.slice(5).reduce((s, x) => s + x.t, 0) + othT;
-    const clSegs = clOther > 0 ? clTop.concat([{ name: '其他客户', t: +clOther.toFixed(1),
-      share: +(clOther / m.big_t * 100).toFixed(1) }]) : clTop;
-    donut($('#cdonut'), clSegs, $('#cd-v'), n(m.big_t));
+    const clOther = +(namedCl.slice(5).reduce((s, x) => s + x.t, 0) + othT).toFixed(1);
+    const clSegs = clOther > 0
+      ? clTop.concat([{ name: '其他客户', t: clOther,
+          share: A.big_t ? +(clOther / A.big_t * 100).toFixed(1) : 0 }])
+      : clTop;
+    donut($('#cdonut'), clSegs, $('#cd-v'), n(A.big_t));
     listify($('#cls'), clSegs);
 
-    const cmpRows = m.channels.slice(0, 4).map((c, i) => ({ name: c.name, t: c.t, share: c.share,
+    /* 副图：渠道在全口径中的位置。分母恒为零售口径总量 —— 渠道表本身不含
+       小额配送，用含小额的全口径当分母会把每条渠道都算低。
+       ★「大客户」必须恒在副图里：按销量取前四它可能排到第五被并进「其他渠道」，
+         而这张卡的副图讲的正是大客户的位置。 */
+    const bigCh = A.channels.filter(c => c.name === '大客户');
+    const pick = bigCh.concat(A.channels.filter(c => c.name !== '大客户')
+      .slice(0, bigCh.length ? 3 : 4));
+    const picked = {};
+    pick.forEach(c => { picked[c.name] = 1; });
+    const cmpRows = pick.map((c, i) => ({ name: c.name, t: c.t, share: c.share,
       col: c.name === '大客户' ? '#d9b878' : PAL[(i + 2) % PAL.length] }));
-    const restT = m.channels.slice(4).reduce((s, x) => s + x.t, 0);
-    if (restT > 0) cmpRows.push({ name: '其他渠道', t: +restT.toFixed(1),
-      share: +(restT / m.t * 100).toFixed(1), col: '#4a6382' });
+    const restT = +A.channels.filter(c => !picked[c.name])
+      .reduce((s, x) => s + x.t, 0).toFixed(1);
+    if (restT > 0) {
+      /* ★ 百分比取余额：各渠道各自 round 到 0.1 会让合计飘到 100.2%，
+         末段用 100 − 已列占比 兜住，保证一列读下来正好 100.0。 */
+      const used = +cmpRows.reduce((s, x) => s + (x.share || 0), 0).toFixed(1);
+      cmpRows.push({ name: '其他渠道', t: restT,
+        share: Math.max(0, +(100 - used).toFixed(1)), col: '#4a6382' });
+    }
     const mxC = Math.max(...cmpRows.map(x => x.t), 1);
     $('#cmp').innerHTML = cmpRows.map(x => `
       <div class="row"><span>${x.name}</span>
         <div class="tr"><div class="fl" style="width:${x.t / mxC * 100}%;background:${x.col}"></div></div>
         <b>${x.share}%</b></div>`).join('');
-    $('#cmp-t').textContent = `大客户量占全口径 ${m.big_share}%，额占 `
-      + (TAX ? `${m.big_ashare}%（含税）` : '按量口径');
+
+    /* 标题行右侧：一眼看清「这是哪一段」，不再让人猜是本月、哪一年还是全年 */
+    $('#cust-span').textContent = A.short + ' · 公司级口径';
+
+    $('#cmp-t').textContent = `大客户 ${n(A.big_t)} 吨，占零售口径 ${A.big_share}%；`
+      + (TAX ? `金额 ${n(A.big_a)} 万元，占 ${A.big_ashare}%（含税）` : '按量口径');
+
+    /* 脚注：三个分母 + 数据来源 + 覆盖范围 + 源表异常，一次讲清。
+       以前这些都不写，用户才会把不同分母的百分比当成同一套来横向比较。 */
+    const notes = [];
+    notes.push(`统计区间 <b>${A.range || '—'}</b>`
+      + (A.kind === 'year' ? ` · ${A.months.length} 个会计月` : ` · 已填 ${A.days} 天`));
+    notes.push(`<b>主图</b>% = 各客户占客户明细合计（含「其他」）｜`
+      + `<b>副图</b>% = 该渠道占零售口径 ${n(A.total_t)} 吨（不含小额配送）`);
+    notes.push(`副图「大客户」取自渠道表，与上方客户明细相差约 1%（两表吨量折算不同）`);
+    notes.push(`数据来源：${A.n_xlsx} 个月取自日报原始文件`
+      + (A.n_live ? `，${A.n_live} 个月取自 WPS 实时推送` : '')
+      + `；客户吨 = 升 × 0.83 / 1000`);
+    if (A.unnamed_t > 0)
+      notes.push(`含 <b>${A.unnamed_n}</b> 个未署名客户槽位共 ${n(A.unnamed_t)} 吨，已并入「其他」`
+        + `（旧版 v2.6 脚本会整块漏掉）`);
+    if (A.n_partial)
+      notes.push(`窗口含 <b>未走完</b> 的会计月，`
+        + (A.kind === 'year' ? '年度累计为部分数，不计算同比' : '该月数据仍在增长'));
+    if (A.yoy && A.yoy.ok)
+      notes.push(`上年同期（${A.yoy.year} 年 1–${A.yoy.mx} 月）${n(A.yoy.prev_t)} 吨，`
+        + `同比 <b>${pctTxt(A.yoy.pct)}</b>`);
+    if (A.bad.length)
+      notes.push(`⚠ 源表「大客户合计」槽与客户槽不符：${A.bad.join('、')}，出数已按客户槽之和修正`);
+    $('#cust-note').innerHTML = notes.map(x => `<div>${x}</div>`).join('');
   } else {
     vCard(P);
   }
