@@ -1685,7 +1685,18 @@ function vCard(P) {
      且与顶部 KPI「产值金额」同一口径同一数值。 */
   const tAmt = +(((dAmt || 0) + (gAmt || 0)).toFixed(1));
   const base = P.chan_base || {};
-  const rows = (P.chan || []).slice(0, 8);
+  /* 渠道项最多 10 个（10 张渠道表），这块竖排只放得下 8 行。
+     ★ 超出部分不许静默丢掉 —— 丢掉后各行占比加起来是 99.8%，会被当成算错。
+       按项目里既定的「末段取余额」：前 7 项照列，剩下的并成「其他渠道」，
+       占比取 100 − 已列占比，于是各行相加恒等于 100%。 */
+  const _all = (P.chan || []);
+  let rows = _all.slice(0, 8);
+  const _restT = _all.slice(8).reduce((s, x) => s + (x.t || 0), 0);
+  if (_restT > 0) {
+    const _used = +rows.slice(0, 7).reduce((s, x) => s + (x.share || 0), 0).toFixed(1);
+    rows = rows.slice(0, 7).concat([{ name: '其他渠道', t: +_restT.toFixed(1),
+      share: Math.max(0, +(100 - _used).toFixed(1)) }]);
+  }
   const mx = Math.max(...rows.map(x => x.share), 1);
 
   box.innerHTML = `
