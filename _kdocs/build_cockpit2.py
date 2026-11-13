@@ -1145,11 +1145,20 @@ VIEW_CO['sub'] = sorted([{'name': _pn, 't': _v['t'], 'diesel': _v['diesel'],
                           'share': _v['share'], 'yoy': _v['yoy']['t']}
                          for _pn, _v in VIEW_PAIR.items()], key=lambda x: -x['t'])
 
-# ★ 公司视角的金额一律取「各对之和」：公司自身再 round 一次会与 Σ各对 差 0.03 万元
+# ★ 公司视角的量与额一律取「各对之和」：公司自身再 round 一次会与 Σ各对 差 0.03 万元
 #   （2026-11-02 实测），页面上「公司 113,899.99」与「各对加总 113,900.02」并排时
-#   会被当成算错。吨量本来就相等（recon 已 PASS），只统一金额即可。
+#   会被当成算错。
+#   ★ 2026-11-13 起吨量也照此办理：实时月累计到 18 天后，16 对各自 round 到 0.1 的
+#     舍入残差会攒成 0.1 吨（实测公司 154,472.3 vs Σ各对 154,472.4，recon 报未通过）。
+#     铁律「总量定死、分项取余额」的落法是反过来 —— 总量 := Σ已舍入分项，
+#     这样「公司」与「各对加总」并排时永远逐位相等。汽仍取余额（总量 − 柴）。
 VIEW_CO['amt'] = round(sum(x['amt'] for x in VIEW_CO['sub']), 2)
 VIEW_CO['wan'] = round(sum(x['wan'] for x in VIEW_CO['sub']), 2)
+VIEW_CO['t'] = round(sum(x['t'] for x in VIEW_CO['sub']), 1)
+VIEW_CO['diesel'] = round(sum(x['diesel'] for x in VIEW_CO['sub']), 1)
+VIEW_CO['gas'] = round(VIEW_CO['t'] - VIEW_CO['diesel'], 1)
+VIEW_CO['price'] = round(VIEW_CO['amt'] * 1e4 / VIEW_CO['t']) if VIEW_CO['t'] else 0
+VIEW_CO['price0'] = round(VIEW_CO['wan'] * 1e4 / VIEW_CO['t']) if VIEW_CO['t'] else 0
 
 # ---- 全口径产值以「各对之和」为唯一权威 ----------------------------------
 # 页面会把「公司合计」与「各对加总」并排，两条独立 round 必然差 0.01~0.03 万元。
