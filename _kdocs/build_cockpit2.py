@@ -1376,6 +1376,42 @@ if _lcm:
         'bad': False, 'file': 'WPS 实时推送',
     }
 
+# ===== 客户改名归并（业务确认后才加）=====
+# 键 = 曾用名，值 = 现用名。2026-11-13 用户确认「中融致远」已改名「金长牛」：
+# 34 份历史 xlsx 的 c12 槽位一直写「中融致远」，WPS 202611 改成了「金长牛」，
+# 不归并就会在年度累计里裂成「中融致远 18,742.8 吨」+「金长牛 951.5 吨」两行。
+# ★ 只放已确认的等价关系；拿不准的宁可留着告警，也不猜。
+CUST_ALIAS = {'中融致远': '金长牛'}
+
+for _lab, _m in CUST_MONTHS.items():
+    _agg, _order = {}, []
+    for _c in _m['clients']:
+        _old = _c['name']
+        _n = CUST_ALIAS.get(_old, _old)
+        _x = _agg.get(_n)
+        if _x is None:
+            _x = _agg[_n] = {'name': _n, 'l': 0.0, 'amt': 0.0, 't': 0.0}
+            _order.append(_n)
+            if _n != _old:
+                _x['alias'] = _old
+        _x['l'] += _c.get('l') or 0
+        _x['amt'] += _c.get('amt') or 0
+        _x['t'] += _c.get('t') or 0
+    _cl = [_agg[k] for k in _order]
+    for _c in _cl:
+        _c['t'] = round(_c['t'], 1)
+        _c['l'] = round(_c['l'], 1)
+        _c['amt'] = round(_c['amt'], 2)
+    _cl.sort(key=lambda x: -x['t'])
+    _bt = round(sum(c['t'] for c in _cl), 1)          # 总量 = 已舍入分项之和
+    _ba = round(sum(c['amt'] for c in _cl), 2)
+    for _c in _cl:
+        _c['share'] = round(_c['t'] / _bt * 100, 1) if _bt else 0
+    _m['clients'] = _cl
+    _m['big_t'], _m['big_a'] = _bt, _ba
+    _m['big_share'] = round(_bt / _m['t'] * 100, 1) if _m['t'] else 0
+    _m['big_ashare'] = round(_ba / _m['amt'] * 100, 1) if _m['amt'] else 0
+
 CUST_ORDER = sorted(CUST_MONTHS, reverse=True)
 CUST_YEARS = {}
 for _k in CUST_ORDER:
@@ -1392,6 +1428,27 @@ for _y, _e in CUST_YEARS.items():
         else ('%s 会计年 · 1–%d 月（%d 个月，含实时 %d 天）'
               % (_y, _mx, _e['n'], _e['live_days']))
 
+# 客户名审计：实时月 vs 上一个 xlsx 月，抓「改名 / 新客户 / 客户消失」。
+# 背景（2026-11-13 实测）：34 份历史 xlsx 的表头 34 个月一字未变
+# （c12 恒「中融致远」、c102 自 2025-04 起「运达通」），但 WPS 那份 202611 的表头
+# 被改过 —— 实时月报出「金长牛」「中冀货运」，具名槽位从 9 个减到 5 个。
+# 量级上 10 月「中融致远」1394.5 吨（30 天）、11 月「金长牛」951.5 吨（18 天，
+# 折月约 1586 吨），同槽位且连续 —— 极像改名，但这属于业务判断，
+# 不擅自合并（会造数），只把矛盾摆到页面上让人确认。
+_prev_lab = next((k for k in CUST_ORDER
+                  if k != CUR_LABEL and CUST_MONTHS[k]['src'] == 'xlsx'), None)
+_name_audit = None
+if _prev_lab:
+    # 判「有没有量」用升数，不用吨：吨已舍入到 0.1，0.04 吨会被抹成 0.0，
+    # 2026-11「陕西卡一车」1.0 吨就被误判成「本月消失」。
+    _prev_set = {c['name'] for c in CUST_MONTHS[_prev_lab]['clients']
+                 if c['name'] != '其他' and (c.get('l') or 0) > 0}
+    _live_set = {c['name'] for c in (CUST_MONTHS.get(CUR_LABEL) or {}).get('clients', [])
+                 if c['name'] != '其他' and (c.get('l') or 0) > 0}
+    _new, _gone = sorted(_live_set - _prev_set), sorted(_prev_set - _live_set)
+    if _new or _gone:
+        _name_audit = {'live': CUR_LABEL, 'prev': _prev_lab, 'new': _new, 'gone': _gone}
+
 CUST_HIST = {
     'coef': CH.get('coef', 0.00083),
     'generated': CH.get('generated', ''),
@@ -1401,6 +1458,8 @@ CUST_HIST = {
     'months': CUST_MONTHS,
     'bad_months': CH.get('bad_months') or [],
     'cur_month': CUR_LABEL,
+    'alias': CUST_ALIAS,
+    'name_audit': _name_audit,
     'note': ('会计月 26 日→次月 25 日，标签取止月；客户吨 = 升 × 0.83 / 1000，'
              '与实时月同一系数。历史月取自日报原始文件，实时月取自 WPS 推送。'
              '占比分母为零售口径（渠道表不含小额配送）。'),
