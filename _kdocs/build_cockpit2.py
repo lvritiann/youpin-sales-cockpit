@@ -1301,9 +1301,117 @@ yearly['roads'] = {
 _labs_desc = sorted(months.keys(), reverse=True)
 MONTH_ORDER = [CUR_LABEL] + [x for x in _labs_desc if x != CUR_LABEL][:2]
 
+# ============================================================================
+# 大客户构成：三年日报「大客户明细」全量接入
+# ----------------------------------------------------------------------------
+# 为什么必须单独做：线上 AirScript 只推当前会计月，payload.months 里带客户明细
+# 的最多 3 个月。用它做「全年」等于拿三个月冒充一年 —— 用户明确要求筛选到
+# 「每个月 / 全年」，并指出三年日报原始文件都已提供。
+# 数据源 _archive/cust_hist.json 由 cust_hist_extract.py 从 34 份原始 xlsx 抽取，
+# 每份都用「大客户合计槽 vs Σ客户槽」对过账（差 0）。空表头但有量的槽位归入
+# 「其他」，正是 WPS 上 v2.6 硬编码客户名漏掉的那部分。
+# 输出结构与 months[mk] 同构，前端单月与全年走同一套聚合，不再各算一套。
+# ============================================================================
+CH = {}
+_chp = os.path.join(ARCH, 'cust_hist.json')
+if os.path.exists(_chp):
+    try:
+        CH = json.load(open(_chp, encoding='utf-8'))
+    except Exception as _e:
+        print('[warn] cust_hist.json 解析失败，大客户构成只剩实时月：', _e)
+else:
+    print('[warn] 缺 _archive/cust_hist.json（跑 _kdocs/cust_hist_extract.py 生成）')
+
+
+def _cust_month_total(tag):
+    """零售总量（吨）/ 含税金额（万元）：与 YRB 同源，走 folder_scan 日块逐日累加。
+       分母必须用零售口径 —— 渠道表本身不含小额配送，用全口径会把占比算低。"""
+    _d = (FS.get(tag) or {}).get('daily') or {}
+    return (round(sum(float(x.get('t') or 0) for x in _d.values()), 1),
+            round(sum(float(x.get('amt') or 0) for x in _d.values()) / 1e4, 2))
+
+
+CUST_MONTHS = {}
+for _lab, _r in (CH.get('months') or {}).items():
+    if _r.get('warnings') or not _r.get('clients'):
+        continue
+    _tt, _ta = _cust_month_total(_r.get('tag') or _lab.replace('-', ''))
+    _cl = _r['clients']
+    # ★ 总量由「已舍入的分项」相加：环形图中心数 ≡ 各段之和，不许各自 round
+    _bt = round(sum(c['t'] for c in _cl), 1)
+    _ba = round(sum(c['amt'] for c in _cl), 2)
+    _ch = sorted([{'name': k, 't': round(v, 1),
+                   'share': round(v / _tt * 100, 1) if _tt else 0}
+                  for k, v in (_r.get('channels') or {}).items()], key=lambda x: -x['t'])
+    CUST_MONTHS[_lab] = {
+        'key': _lab, 'name': acct_name(_lab), 'range': acct_range_txt(_lab),
+        'days': _r.get('days') or 0, 'partial': False, 'src': 'xlsx',
+        't': _tt, 'amt': _ta, 'clients': _cl, 'channels': _ch,
+        'big_t': _bt, 'big_a': _ba,
+        'big_share': round(_bt / _tt * 100, 1) if _tt else 0,
+        'big_ashare': round(_ba / _ta * 100, 1) if _ta else 0,
+        'unnamed_t': _r.get('unnamed_t') or 0,
+        'unnamed_n': _r.get('unnamed_n') or 0,
+        'check_gap_l': _r.get('check_gap_l') or 0,
+        'bad': bool(_r.get('bad')), 'file': _r.get('file') or '',
+    }
+
+# 实时月（WPS 推送）补进来：本地 xlsx 只到 202610，11 月只能走 payload。
+# 它用的是 AirScript 的客户分类，v2.6 会有错配/漏量 —— src='live' 让前端
+# 在脚注里如实标注「本窗口含 1 个月来自 WPS 实时推送，待 v2.9 上线后对齐」。
+_lcm = months.get(CUR_LABEL)
+if _lcm:
+    _cl = _lcm.get('clients') or []
+    _bt = round(sum(c.get('t', 0) for c in _cl), 1)
+    _ba = round(sum(c.get('amt', 0) for c in _cl), 2)
+    _tt, _ta = _lcm['t'], _lcm['amt']
+    CUST_MONTHS[CUR_LABEL] = {
+        'key': CUR_LABEL, 'name': _lcm['name'], 'range': _lcm['range'],
+        'days': _lcm['days'], 'partial': True, 'src': 'live',
+        't': _tt, 'amt': _ta, 'clients': _cl, 'channels': _lcm['channels'],
+        'big_t': _bt, 'big_a': _ba,
+        'big_share': round(_bt / _tt * 100, 1) if _tt else 0,
+        'big_ashare': round(_ba / _ta * 100, 1) if _ta else 0,
+        'unnamed_t': 0, 'unnamed_n': 0, 'check_gap_l': 0,
+        'bad': False, 'file': 'WPS 实时推送',
+    }
+
+CUST_ORDER = sorted(CUST_MONTHS, reverse=True)
+CUST_YEARS = {}
+for _k in CUST_ORDER:
+    _e = CUST_YEARS.setdefault(_k[:4], {'months': [], 'complete': True, 'live_days': 0})
+    _e['months'].append(_k)
+    if CUST_MONTHS[_k]['partial']:
+        _e['complete'] = False
+        _e['live_days'] = CUST_MONTHS[_k]['days']
+for _y, _e in CUST_YEARS.items():
+    _e['months'].sort()
+    _e['n'] = len(_e['months'])
+    _mx = max(int(k[5:]) for k in _e['months'])
+    _e['label'] = ('%s 会计年 · 完整 12 个月' % _y) if (_e['n'] == 12 and _e['complete']) \
+        else ('%s 会计年 · 1–%d 月（%d 个月，含实时 %d 天）'
+              % (_y, _mx, _e['n'], _e['live_days']))
+
+CUST_HIST = {
+    'coef': CH.get('coef', 0.00083),
+    'generated': CH.get('generated', ''),
+    'source': CH.get('source', ''),
+    'order': CUST_ORDER,
+    'years': dict(sorted(CUST_YEARS.items(), reverse=True)),
+    'months': CUST_MONTHS,
+    'bad_months': CH.get('bad_months') or [],
+    'cur_month': CUR_LABEL,
+    'note': ('会计月 26 日→次月 25 日，标签取止月；客户吨 = 升 × 0.83 / 1000，'
+             '与实时月同一系数。历史月取自日报原始文件，实时月取自 WPS 推送。'
+             '占比分母为零售口径（渠道表不含小额配送）。'),
+}
+print('大客户历史：%d 个会计月 | 会计年 %s | 异常 %d'
+      % (len(CUST_MONTHS), list(CUST_HIST['years']), len(CUST_HIST['bad_months'])))
+
 payload = {'meta': {'generated': (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).strftime('%Y-%m-%d %H:%M'),                    'month_order': MONTH_ORDER,
                     'trend': TREND},
            'months': months, 'yearly': yearly,
+           'cust_hist': CUST_HIST,
            'daily_win': WINDOWS, 'last_date': LAST_DT.isoformat() if LAST_DT else ''}
 
 # ---- 前一日各站销量（日走势图上方那条窄条） ----
