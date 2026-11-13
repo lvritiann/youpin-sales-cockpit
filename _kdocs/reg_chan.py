@@ -105,7 +105,7 @@ def main():
             bad.append('渠道表里查不到这一对（站名不一致？）')
         if n < 8:
             bad.append('渠道项仅 %d' % n)
-        if abs(ps - 100) > 0.15:
+        if abs(ps - 100) > 0.05:
             bad.append('占比合计 %.1f%%' % ps)
         if d['err']:
             bad.append('JS 错误 %s' % d['err'][:60])
