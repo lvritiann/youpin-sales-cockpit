@@ -22,13 +22,13 @@
   "expected_days": 30,
   "days_count": 2,
   "status": "running",
-  "retail_t": 561.78,
-  "diesel_t": 374.71,
+  "retail_t": 562.03,
+  "diesel_t": 374.95,
   "gas_t": 187.08,
-  "xiao_t": 0,
-  "full_t": 561.78,
+  "xiao_t": 147.89,
+  "full_t": 709.92,
   "amt": 5534415.19,
   "wan": 494.064,
-  "stamp": "2026-11-28T00:30:51"
+  "stamp": "2026-11-28T02:01:05"
  }
 }
